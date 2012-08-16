@@ -28,6 +28,12 @@
  */
 #define BRCMS_LEGACY_5G_RATE_OFFSET	4
 
+/*
+ * Starting index for 5G rates in the
+ * legacy rate table.
+ */
+#define BRCMS_LEGACY_5G_RATE_OFFSET	4
+
 /* softmac ioctl definitions */
 #define BRCMS_SET_SHORTSLOT_OVERRIDE		146
 

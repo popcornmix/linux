@@ -66,6 +66,7 @@ MODULE_PARM_DESC(tjmax, "TjMax value in degrees Celsius");
 #else
 #define for_each_sibling(i, cpu)	for (i = 0; false; )
 #endif
+#define TO_ATTR_NO(cpu)		(TO_CORE_ID(cpu) + BASE_SYSFS_ATTR_NO)
 
 /*
  * Per-Core Temperature Data
