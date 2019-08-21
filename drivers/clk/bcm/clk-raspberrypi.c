@@ -19,6 +19,7 @@
 #include <soc/bcm2835/raspberrypi-firmware.h>
 
 #define RPI_FIRMWARE_ARM_CLK_ID		0x00000003
+#define RPI_FIRMWARE_V3D_CLK_ID		0x00000005
 
 #define RPI_FIRMWARE_STATE_ENABLE_BIT	BIT(0)
 #define RPI_FIRMWARE_STATE_WAIT_BIT	BIT(1)
@@ -31,6 +32,12 @@
 
 #define A2W_PLL_FRAC_BITS		20
 
+struct raspberrypi_pll {
+	const char *clock_name, *parent_name, *divider_name, *dev_id;
+	u32 clock_id;
+	u32 mult, div;
+};
+
 struct raspberrypi_clk {
 	struct device *dev;
 	struct rpi_firmware *firmware;
@@ -42,6 +49,13 @@ struct raspberrypi_clk {
 	struct clk_hw pllb;
 	struct clk_hw *pllb_arm;
 	struct clk_lookup *pllb_arm_lookup;
+	const struct raspberrypi_pll *pll_info;
+};
+
+
+static const struct raspberrypi_pll plls[] = {
+	{"pllb", "osc", "pllb_arm", "cpu0", RPI_FIRMWARE_ARM_CLK_ID, 1, 2},
+	{"v3d", "osc", "", "", RPI_FIRMWARE_V3D_CLK_ID, 0, 0},
 };
 
 /*
@@ -92,7 +106,7 @@ static int raspberrypi_fw_pll_is_on(struct clk_hw *hw)
 
 	ret = raspberrypi_clock_property(rpi->firmware,
 					 RPI_FIRMWARE_GET_CLOCK_STATE,
-					 RPI_FIRMWARE_ARM_CLK_ID, &val);
+					 rpi->pll_info->clock_id, &val);
 	if (ret)
 		return 0;
 
@@ -110,7 +124,7 @@ static unsigned long raspberrypi_fw_pll_get_rate(struct clk_hw *hw,
 
 	ret = raspberrypi_clock_property(rpi->firmware,
 					 RPI_FIRMWARE_GET_CLOCK_RATE,
-					 RPI_FIRMWARE_ARM_CLK_ID,
+					 rpi->pll_info->clock_id,
 					 &val);
 	if (ret)
 		return ret;
@@ -128,7 +142,7 @@ static int raspberrypi_fw_pll_set_rate(struct clk_hw *hw, unsigned long rate,
 
 	ret = raspberrypi_clock_property(rpi->firmware,
 					 RPI_FIRMWARE_SET_CLOCK_RATE,
-					 RPI_FIRMWARE_ARM_CLK_ID,
+					 rpi->pll_info->clock_id,
 					 &new_rate);
 	if (ret)
 		dev_err_ratelimited(rpi->dev, "Failed to change %s frequency: %d",
@@ -177,21 +191,21 @@ static int raspberrypi_register_pllb(struct raspberrypi_clk *rpi)
 {
 	u32 min_rate = 0, max_rate = 0;
 	struct clk_init_data init;
+	const struct raspberrypi_pll *pll = rpi->pll_info;
 	int ret;
-
 	memset(&init, 0, sizeof(init));
 
 	/* All of the PLLs derive from the external oscillator. */
-	init.parent_names = (const char *[]){ "osc" };
+	init.parent_names = (const char *[]){ pll->parent_name };
 	init.num_parents = 1;
-	init.name = "pllb";
+	init.name = pll->clock_name;
 	init.ops = &raspberrypi_firmware_pll_clk_ops;
-	init.flags = CLK_GET_RATE_NOCACHE | CLK_IGNORE_UNUSED;
+	init.flags = 0x8; //CLK_GET_RATE_NOCACHE | CLK_IGNORE_UNUSED;
 
 	/* Get min & max rates set by the firmware */
 	ret = raspberrypi_clock_property(rpi->firmware,
 					 RPI_FIRMWARE_GET_MIN_CLOCK_RATE,
-					 RPI_FIRMWARE_ARM_CLK_ID,
+					 rpi->pll_info->clock_id,
 					 &min_rate);
 	if (ret) {
 		dev_err(rpi->dev, "Failed to get %s min freq: %d\n",
@@ -201,7 +215,7 @@ static int raspberrypi_register_pllb(struct raspberrypi_clk *rpi)
 
 	ret = raspberrypi_clock_property(rpi->firmware,
 					 RPI_FIRMWARE_GET_MAX_CLOCK_RATE,
-					 RPI_FIRMWARE_ARM_CLK_ID,
+					 rpi->pll_info->clock_id,
 					 &max_rate);
 	if (ret) {
 		dev_err(rpi->dev, "Failed to get %s max freq: %d\n",
@@ -228,18 +242,21 @@ static int raspberrypi_register_pllb(struct raspberrypi_clk *rpi)
 
 static int raspberrypi_register_pllb_arm(struct raspberrypi_clk *rpi)
 {
+	const struct raspberrypi_pll *pll = rpi->pll_info;
+
 	rpi->pllb_arm = clk_hw_register_fixed_factor(rpi->dev,
-				"pllb_arm", "pllb",
+				pll->divider_name, pll->clock_name,
 				CLK_SET_RATE_PARENT | CLK_GET_RATE_NOCACHE,
-				1, 2);
+				rpi->pll_info->mult, rpi->pll_info->div);
+
 	if (IS_ERR(rpi->pllb_arm)) {
-		dev_err(rpi->dev, "Failed to initialize pllb_arm\n");
+		dev_err(rpi->dev, "Failed to initialize %s\n", rpi->pll_info->clock_name);
 		return PTR_ERR(rpi->pllb_arm);
 	}
 
-	rpi->pllb_arm_lookup = clkdev_hw_create(rpi->pllb_arm, NULL, "cpu0");
+	rpi->pllb_arm_lookup = clkdev_hw_create(rpi->pllb_arm, NULL, rpi->pll_info->dev_id);
 	if (!rpi->pllb_arm_lookup) {
-		dev_err(rpi->dev, "Failed to initialize pllb_arm_lookup\n");
+		dev_err(rpi->dev, "Failed to initialize %s lookup\n", rpi->pll_info->clock_name);
 		clk_hw_unregister_fixed_factor(rpi->pllb_arm);
 		return -ENOMEM;
 	}
@@ -254,6 +271,7 @@ static int raspberrypi_clk_probe(struct platform_device *pdev)
 	struct rpi_firmware *firmware;
 	struct raspberrypi_clk *rpi;
 	int ret;
+	int i;
 
 	firmware_node = of_find_compatible_node(NULL, NULL,
 					"raspberrypi,bcm2835-firmware");
@@ -267,27 +285,36 @@ static int raspberrypi_clk_probe(struct platform_device *pdev)
 	if (!firmware)
 		return -EPROBE_DEFER;
 
-	rpi = devm_kzalloc(dev, sizeof(*rpi), GFP_KERNEL);
-	if (!rpi)
-		return -ENOMEM;
+	for (i=0; i < ARRAY_SIZE(plls); i++) {
+		rpi = devm_kzalloc(dev, sizeof(*rpi), GFP_KERNEL);
+		if (!rpi)
+			return -ENOMEM;
 
-	rpi->dev = dev;
-	rpi->firmware = firmware;
-	platform_set_drvdata(pdev, rpi);
+		rpi->dev = dev;
+		rpi->firmware = firmware;
+		rpi->pll_info = &plls[i];
+		if (i == 0)
+			platform_set_drvdata(pdev, rpi);
 
-	ret = raspberrypi_register_pllb(rpi);
-	if (ret) {
-		dev_err(dev, "Failed to initialize pllb, %d\n", ret);
-		return ret;
+
+
+		ret = raspberrypi_register_pllb(rpi);
+		if (ret) {
+			dev_err(dev, "Failed to initialize %s, %d (pllb)\n", rpi->pll_info->clock_name, ret);
+			//return ret;
+		}
+
+		if (rpi->pll_info->mult != rpi->pll_info->div) {
+			ret = raspberrypi_register_pllb_arm(rpi);
+			if (ret) {
+				dev_err(dev, "Failed to initialize %s, %d (pllb_arm)\n", rpi->pll_info->clock_name, ret);
+				//return ret;
+			}
+		}
+		if (i == 0)
+			rpi->cpufreq = platform_device_register_data(dev, "raspberrypi-cpufreq",
+								     -1, NULL, 0);
 	}
-
-	ret = raspberrypi_register_pllb_arm(rpi);
-	if (ret)
-		return ret;
-
-	rpi->cpufreq = platform_device_register_data(dev, "raspberrypi-cpufreq",
-						     -1, NULL, 0);
-
 	return 0;
 }
 
