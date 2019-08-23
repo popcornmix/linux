@@ -298,7 +298,7 @@ static int v3d_platform_drm_probe(struct platform_device *pdev)
 	}
 
 	v3d->clk = devm_clk_get(dev, NULL);
-	if (IS_ERR(v3d->clk)) {
+	if (!v3d->clk || IS_ERR(v3d->clk)) {
 		if (ret != -EPROBE_DEFER)
 			dev_err(dev, "Failed to get clock\n");
 		goto dev_free;
