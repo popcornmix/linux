@@ -1703,6 +1703,7 @@ static const struct bcm2835_clk_desc clk_desc_array[] = {
 		.hold_mask = CM_PLLA_HOLDCORE,
 		.fixed_divider = 1,
 		.flags = CLK_SET_RATE_PARENT),
+#if 0
 	[BCM2835_PLLA_PER]	= REGISTER_PLL_DIV(
 		.name = "plla_per",
 		.source_pll = "plla",
@@ -1712,6 +1713,7 @@ static const struct bcm2835_clk_desc clk_desc_array[] = {
 		.hold_mask = CM_PLLA_HOLDPER,
 		.fixed_divider = 1,
 		.flags = CLK_SET_RATE_PARENT),
+#endif
 	[BCM2835_PLLA_DSI0]	= REGISTER_PLL_DIV(
 		.name = "plla_dsi0",
 		.source_pll = "plla",
@@ -1961,6 +1963,7 @@ static const struct bcm2835_clk_desc clk_desc_array[] = {
 		.int_bits = 6,
 		.frac_bits = 0,
 		.tcnt_mux = 3),
+#if 0
 	[BCM2835_CLOCK_V3D]	= REGISTER_VPU_CLK(
 		.name = "v3d",
 		.ctl_reg = CM_V3DCTL,
@@ -1968,6 +1971,7 @@ static const struct bcm2835_clk_desc clk_desc_array[] = {
 		.int_bits = 4,
 		.frac_bits = 8,
 		.tcnt_mux = 4),
+#endif
 	/*
 	 * VPU clock.  This doesn't have an enable bit, since it drives
 	 * the bus for everything else, and is special so it doesn't need
