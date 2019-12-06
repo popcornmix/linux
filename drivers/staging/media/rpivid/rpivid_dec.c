@@ -18,15 +18,14 @@
 #include <media/v4l2-event.h>
 #include <media/v4l2-mem2mem.h>
 
-#include "cedrus.h"
-#include "cedrus_dec.h"
-#include "cedrus_hw.h"
+#include "rpivid.h"
+#include "rpivid_dec.h"
 
-void cedrus_device_run(void *priv)
+void rpivid_device_run(void *priv)
 {
-	struct cedrus_ctx *ctx = priv;
-	struct cedrus_dev *dev = ctx->dev;
-	struct cedrus_run run = {};
+	struct rpivid_ctx *ctx = priv;
+	struct rpivid_dev *dev = ctx->dev;
+	struct rpivid_run run = {};
 	struct media_request *src_req;
 
 	run.src = v4l2_m2m_next_src_buf(ctx->fh.m2m_ctx);
@@ -40,31 +39,31 @@ void cedrus_device_run(void *priv)
 
 	switch (ctx->src_fmt.pixelformat) {
 	case V4L2_PIX_FMT_MPEG2_SLICE:
-		run.mpeg2.slice_params = cedrus_find_control_data(ctx,
+		run.mpeg2.slice_params = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_MPEG2_SLICE_PARAMS);
-		run.mpeg2.quantization = cedrus_find_control_data(ctx,
+		run.mpeg2.quantization = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_MPEG2_QUANTIZATION);
 		break;
 
 	case V4L2_PIX_FMT_H264_SLICE:
-		run.h264.decode_params = cedrus_find_control_data(ctx,
+		run.h264.decode_params = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_H264_DECODE_PARAMS);
-		run.h264.pps = cedrus_find_control_data(ctx,
+		run.h264.pps = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_H264_PPS);
-		run.h264.scaling_matrix = cedrus_find_control_data(ctx,
+		run.h264.scaling_matrix = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_H264_SCALING_MATRIX);
-		run.h264.slice_params = cedrus_find_control_data(ctx,
+		run.h264.slice_params = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_H264_SLICE_PARAMS);
-		run.h264.sps = cedrus_find_control_data(ctx,
+		run.h264.sps = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_H264_SPS);
 		break;
 
 	case V4L2_PIX_FMT_HEVC_SLICE:
-		run.h265.sps = cedrus_find_control_data(ctx,
+		run.h265.sps = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_HEVC_SPS);
-		run.h265.pps = cedrus_find_control_data(ctx,
+		run.h265.pps = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_HEVC_PPS);
-		run.h265.slice_params = cedrus_find_control_data(ctx,
+		run.h265.slice_params = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_HEVC_SLICE_PARAMS);
 		break;
 

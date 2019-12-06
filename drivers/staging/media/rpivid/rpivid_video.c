@@ -19,60 +19,59 @@
 #include <media/v4l2-event.h>
 #include <media/v4l2-mem2mem.h>
 
-#include "cedrus.h"
-#include "cedrus_video.h"
-#include "cedrus_dec.h"
-#include "cedrus_hw.h"
+#include "rpivid.h"
+#include "rpivid_video.h"
+#include "rpivid_dec.h"
 
-#define CEDRUS_DECODE_SRC	BIT(0)
-#define CEDRUS_DECODE_DST	BIT(1)
+#define RPIVID_DECODE_SRC	BIT(0)
+#define RPIVID_DECODE_DST	BIT(1)
 
-#define CEDRUS_MIN_WIDTH	16U
-#define CEDRUS_MIN_HEIGHT	16U
-#define CEDRUS_MAX_WIDTH	4096U
-#define CEDRUS_MAX_HEIGHT	2304U
+#define RPIVID_MIN_WIDTH	16U
+#define RPIVID_MIN_HEIGHT	16U
+#define RPIVID_MAX_WIDTH	4096U
+#define RPIVID_MAX_HEIGHT	2304U
 
-static struct cedrus_format cedrus_formats[] = {
+static struct rpivid_format rpivid_formats[] = {
 	{
 		.pixelformat	= V4L2_PIX_FMT_MPEG2_SLICE,
-		.directions	= CEDRUS_DECODE_SRC,
+		.directions	= RPIVID_DECODE_SRC,
 	},
 	{
 		.pixelformat	= V4L2_PIX_FMT_H264_SLICE,
-		.directions	= CEDRUS_DECODE_SRC,
+		.directions	= RPIVID_DECODE_SRC,
 	},
 	{
 		.pixelformat	= V4L2_PIX_FMT_HEVC_SLICE,
-		.directions	= CEDRUS_DECODE_SRC,
-		.capabilities	= CEDRUS_CAPABILITY_H265_DEC,
+		.directions	= RPIVID_DECODE_SRC,
+		.capabilities	= RPIVID_CAPABILITY_H265_DEC,
 	},
 	{
 		.pixelformat	= V4L2_PIX_FMT_SUNXI_TILED_NV12,
-		.directions	= CEDRUS_DECODE_DST,
+		.directions	= RPIVID_DECODE_DST,
 	},
 	{
 		.pixelformat	= V4L2_PIX_FMT_NV12,
-		.directions	= CEDRUS_DECODE_DST,
-		.capabilities	= CEDRUS_CAPABILITY_UNTILED,
+		.directions	= RPIVID_DECODE_DST,
+		.capabilities	= RPIVID_CAPABILITY_UNTILED,
 	},
 };
 
-#define CEDRUS_FORMATS_COUNT	ARRAY_SIZE(cedrus_formats)
+#define RPIVID_FORMATS_COUNT	ARRAY_SIZE(rpivid_formats)
 
-static inline struct cedrus_ctx *cedrus_file2ctx(struct file *file)
+static inline struct rpivid_ctx *rpivid_file2ctx(struct file *file)
 {
-	return container_of(file->private_data, struct cedrus_ctx, fh);
+	return container_of(file->private_data, struct rpivid_ctx, fh);
 }
 
-static struct cedrus_format *cedrus_find_format(u32 pixelformat, u32 directions,
+static struct rpivid_format *rpivid_find_format(u32 pixelformat, u32 directions,
 						unsigned int capabilities)
 {
-	struct cedrus_format *first_valid_fmt = NULL;
-	struct cedrus_format *fmt;
+	struct rpivid_format *first_valid_fmt = NULL;
+	struct rpivid_format *fmt;
 	unsigned int i;
 
-	for (i = 0; i < CEDRUS_FORMATS_COUNT; i++) {
-		fmt = &cedrus_formats[i];
+	for (i = 0; i < RPIVID_FORMATS_COUNT; i++) {
+		fmt = &rpivid_formats[i];
 
 		if ((fmt->capabilities & capabilities) != fmt->capabilities ||
 		    !(fmt->directions & directions))
@@ -85,13 +84,13 @@ static struct cedrus_format *cedrus_find_format(u32 pixelformat, u32 directions,
 			first_valid_fmt = fmt;
 	}
 
-	if (i == CEDRUS_FORMATS_COUNT)
+	if (i == RPIVID_FORMATS_COUNT)
 		return first_valid_fmt;
 
-	return &cedrus_formats[i];
+	return &rpivid_formats[i];
 }
 
-void cedrus_prepare_format(struct v4l2_pix_format *pix_fmt)
+void rpivid_prepare_format(struct v4l2_pix_format *pix_fmt)
 {
 	unsigned int width = pix_fmt->width;
 	unsigned int height = pix_fmt->height;
@@ -101,8 +100,8 @@ void cedrus_prepare_format(struct v4l2_pix_format *pix_fmt)
 	pix_fmt->field = V4L2_FIELD_NONE;
 
 	/* Limit to hardware min/max. */
-	width = clamp(width, CEDRUS_MIN_WIDTH, CEDRUS_MAX_WIDTH);
-	height = clamp(height, CEDRUS_MIN_HEIGHT, CEDRUS_MAX_HEIGHT);
+	width = clamp(width, RPIVID_MIN_WIDTH, RPIVID_MAX_WIDTH);
+	height = clamp(height, RPIVID_MIN_HEIGHT, RPIVID_MAX_HEIGHT);
 
 	switch (pix_fmt->pixelformat) {
 	case V4L2_PIX_FMT_MPEG2_SLICE:
@@ -152,37 +151,37 @@ void cedrus_prepare_format(struct v4l2_pix_format *pix_fmt)
 	pix_fmt->sizeimage = sizeimage;
 }
 
-static int cedrus_querycap(struct file *file, void *priv,
+static int rpivid_querycap(struct file *file, void *priv,
 			   struct v4l2_capability *cap)
 {
-	strscpy(cap->driver, CEDRUS_NAME, sizeof(cap->driver));
-	strscpy(cap->card, CEDRUS_NAME, sizeof(cap->card));
+	strscpy(cap->driver, RPIVID_NAME, sizeof(cap->driver));
+	strscpy(cap->card, RPIVID_NAME, sizeof(cap->card));
 	snprintf(cap->bus_info, sizeof(cap->bus_info),
-		 "platform:%s", CEDRUS_NAME);
+		 "platform:%s", RPIVID_NAME);
 
 	return 0;
 }
 
-static int cedrus_enum_fmt(struct file *file, struct v4l2_fmtdesc *f,
+static int rpivid_enum_fmt(struct file *file, struct v4l2_fmtdesc *f,
 			   u32 direction)
 {
-	struct cedrus_ctx *ctx = cedrus_file2ctx(file);
-	struct cedrus_dev *dev = ctx->dev;
+	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
+	struct rpivid_dev *dev = ctx->dev;
 	unsigned int capabilities = dev->capabilities;
-	struct cedrus_format *fmt;
+	struct rpivid_format *fmt;
 	unsigned int i, index;
 
 	/* Index among formats that match the requested direction. */
 	index = 0;
 
-	for (i = 0; i < CEDRUS_FORMATS_COUNT; i++) {
-		fmt = &cedrus_formats[i];
+	for (i = 0; i < RPIVID_FORMATS_COUNT; i++) {
+		fmt = &rpivid_formats[i];
 
 		if (fmt->capabilities && (fmt->capabilities & capabilities) !=
 		    fmt->capabilities)
 			continue;
 
-		if (!(cedrus_formats[i].directions & direction))
+		if (!(rpivid_formats[i].directions & direction))
 			continue;
 
 		if (index == f->index)
@@ -192,8 +191,8 @@ static int cedrus_enum_fmt(struct file *file, struct v4l2_fmtdesc *f,
 	}
 
 	/* Matched format. */
-	if (i < CEDRUS_FORMATS_COUNT) {
-		f->pixelformat = cedrus_formats[i].pixelformat;
+	if (i < RPIVID_FORMATS_COUNT) {
+		f->pixelformat = rpivid_formats[i].pixelformat;
 
 		return 0;
 	}
@@ -201,79 +200,79 @@ static int cedrus_enum_fmt(struct file *file, struct v4l2_fmtdesc *f,
 	return -EINVAL;
 }
 
-static int cedrus_enum_fmt_vid_cap(struct file *file, void *priv,
+static int rpivid_enum_fmt_vid_cap(struct file *file, void *priv,
 				   struct v4l2_fmtdesc *f)
 {
-	return cedrus_enum_fmt(file, f, CEDRUS_DECODE_DST);
+	return rpivid_enum_fmt(file, f, RPIVID_DECODE_DST);
 }
 
-static int cedrus_enum_fmt_vid_out(struct file *file, void *priv,
+static int rpivid_enum_fmt_vid_out(struct file *file, void *priv,
 				   struct v4l2_fmtdesc *f)
 {
-	return cedrus_enum_fmt(file, f, CEDRUS_DECODE_SRC);
+	return rpivid_enum_fmt(file, f, RPIVID_DECODE_SRC);
 }
 
-static int cedrus_g_fmt_vid_cap(struct file *file, void *priv,
+static int rpivid_g_fmt_vid_cap(struct file *file, void *priv,
 				struct v4l2_format *f)
 {
-	struct cedrus_ctx *ctx = cedrus_file2ctx(file);
+	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
 
 	f->fmt.pix = ctx->dst_fmt;
 	return 0;
 }
 
-static int cedrus_g_fmt_vid_out(struct file *file, void *priv,
+static int rpivid_g_fmt_vid_out(struct file *file, void *priv,
 				struct v4l2_format *f)
 {
-	struct cedrus_ctx *ctx = cedrus_file2ctx(file);
+	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
 
 	f->fmt.pix = ctx->src_fmt;
 	return 0;
 }
 
-static int cedrus_try_fmt_vid_cap(struct file *file, void *priv,
+static int rpivid_try_fmt_vid_cap(struct file *file, void *priv,
 				  struct v4l2_format *f)
 {
-	struct cedrus_ctx *ctx = cedrus_file2ctx(file);
-	struct cedrus_dev *dev = ctx->dev;
+	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
+	struct rpivid_dev *dev = ctx->dev;
 	struct v4l2_pix_format *pix_fmt = &f->fmt.pix;
-	struct cedrus_format *fmt =
-		cedrus_find_format(pix_fmt->pixelformat, CEDRUS_DECODE_DST,
+	struct rpivid_format *fmt =
+		rpivid_find_format(pix_fmt->pixelformat, RPIVID_DECODE_DST,
 				   dev->capabilities);
 
 	if (!fmt)
 		return -EINVAL;
 
 	pix_fmt->pixelformat = fmt->pixelformat;
-	cedrus_prepare_format(pix_fmt);
+	rpivid_prepare_format(pix_fmt);
 
 	return 0;
 }
 
-static int cedrus_try_fmt_vid_out(struct file *file, void *priv,
+static int rpivid_try_fmt_vid_out(struct file *file, void *priv,
 				  struct v4l2_format *f)
 {
-	struct cedrus_ctx *ctx = cedrus_file2ctx(file);
-	struct cedrus_dev *dev = ctx->dev;
+	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
+	struct rpivid_dev *dev = ctx->dev;
 	struct v4l2_pix_format *pix_fmt = &f->fmt.pix;
-	struct cedrus_format *fmt =
-		cedrus_find_format(pix_fmt->pixelformat, CEDRUS_DECODE_SRC,
+	struct rpivid_format *fmt =
+		rpivid_find_format(pix_fmt->pixelformat, RPIVID_DECODE_SRC,
 				   dev->capabilities);
 
 	if (!fmt)
 		return -EINVAL;
 
 	pix_fmt->pixelformat = fmt->pixelformat;
-	cedrus_prepare_format(pix_fmt);
+	rpivid_prepare_format(pix_fmt);
 
 	return 0;
 }
 
-static int cedrus_s_fmt_vid_cap(struct file *file, void *priv,
+static int rpivid_s_fmt_vid_cap(struct file *file, void *priv,
 				struct v4l2_format *f)
 {
-	struct cedrus_ctx *ctx = cedrus_file2ctx(file);
-	struct cedrus_dev *dev = ctx->dev;
+	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
+	struct rpivid_dev *dev = ctx->dev;
 	struct vb2_queue *vq;
 	int ret;
 
@@ -281,21 +280,22 @@ static int cedrus_s_fmt_vid_cap(struct file *file, void *priv,
 	if (vb2_is_busy(vq))
 		return -EBUSY;
 
-	ret = cedrus_try_fmt_vid_cap(file, priv, f);
+	ret = rpivid_try_fmt_vid_cap(file, priv, f);
 	if (ret)
 		return ret;
 
 	ctx->dst_fmt = f->fmt.pix;
 
-	cedrus_dst_format_set(dev, &ctx->dst_fmt);
+	// #### FIXME
+//	rpivid_dst_format_set(dev, &ctx->dst_fmt);
 
 	return 0;
 }
 
-static int cedrus_s_fmt_vid_out(struct file *file, void *priv,
+static int rpivid_s_fmt_vid_out(struct file *file, void *priv,
 				struct v4l2_format *f)
 {
-	struct cedrus_ctx *ctx = cedrus_file2ctx(file);
+	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
 	struct vb2_queue *vq;
 	int ret;
 
@@ -303,7 +303,7 @@ static int cedrus_s_fmt_vid_out(struct file *file, void *priv,
 	if (vb2_is_busy(vq))
 		return -EBUSY;
 
-	ret = cedrus_try_fmt_vid_out(file, priv, f);
+	ret = rpivid_try_fmt_vid_out(file, priv, f);
 	if (ret)
 		return ret;
 
@@ -329,18 +329,18 @@ static int cedrus_s_fmt_vid_out(struct file *file, void *priv,
 	return 0;
 }
 
-const struct v4l2_ioctl_ops cedrus_ioctl_ops = {
-	.vidioc_querycap		= cedrus_querycap,
+const struct v4l2_ioctl_ops rpivid_ioctl_ops = {
+	.vidioc_querycap		= rpivid_querycap,
 
-	.vidioc_enum_fmt_vid_cap	= cedrus_enum_fmt_vid_cap,
-	.vidioc_g_fmt_vid_cap		= cedrus_g_fmt_vid_cap,
-	.vidioc_try_fmt_vid_cap		= cedrus_try_fmt_vid_cap,
-	.vidioc_s_fmt_vid_cap		= cedrus_s_fmt_vid_cap,
+	.vidioc_enum_fmt_vid_cap	= rpivid_enum_fmt_vid_cap,
+	.vidioc_g_fmt_vid_cap		= rpivid_g_fmt_vid_cap,
+	.vidioc_try_fmt_vid_cap		= rpivid_try_fmt_vid_cap,
+	.vidioc_s_fmt_vid_cap		= rpivid_s_fmt_vid_cap,
 
-	.vidioc_enum_fmt_vid_out	= cedrus_enum_fmt_vid_out,
-	.vidioc_g_fmt_vid_out		= cedrus_g_fmt_vid_out,
-	.vidioc_try_fmt_vid_out		= cedrus_try_fmt_vid_out,
-	.vidioc_s_fmt_vid_out		= cedrus_s_fmt_vid_out,
+	.vidioc_enum_fmt_vid_out	= rpivid_enum_fmt_vid_out,
+	.vidioc_g_fmt_vid_out		= rpivid_g_fmt_vid_out,
+	.vidioc_try_fmt_vid_out		= rpivid_try_fmt_vid_out,
+	.vidioc_s_fmt_vid_out		= rpivid_s_fmt_vid_out,
 
 	.vidioc_reqbufs			= v4l2_m2m_ioctl_reqbufs,
 	.vidioc_querybuf		= v4l2_m2m_ioctl_querybuf,
@@ -360,11 +360,11 @@ const struct v4l2_ioctl_ops cedrus_ioctl_ops = {
 	.vidioc_unsubscribe_event	= v4l2_event_unsubscribe,
 };
 
-static int cedrus_queue_setup(struct vb2_queue *vq, unsigned int *nbufs,
+static int rpivid_queue_setup(struct vb2_queue *vq, unsigned int *nbufs,
 			      unsigned int *nplanes, unsigned int sizes[],
 			      struct device *alloc_devs[])
 {
-	struct cedrus_ctx *ctx = vb2_get_drv_priv(vq);
+	struct rpivid_ctx *ctx = vb2_get_drv_priv(vq);
 	struct v4l2_pix_format *pix_fmt;
 
 	if (V4L2_TYPE_IS_OUTPUT(vq->type))
@@ -383,9 +383,9 @@ static int cedrus_queue_setup(struct vb2_queue *vq, unsigned int *nbufs,
 	return 0;
 }
 
-static void cedrus_queue_cleanup(struct vb2_queue *vq, u32 state)
+static void rpivid_queue_cleanup(struct vb2_queue *vq, u32 state)
 {
-	struct cedrus_ctx *ctx = vb2_get_drv_priv(vq);
+	struct rpivid_ctx *ctx = vb2_get_drv_priv(vq);
 	struct vb2_v4l2_buffer *vbuf;
 
 	for (;;) {
@@ -403,7 +403,7 @@ static void cedrus_queue_cleanup(struct vb2_queue *vq, u32 state)
 	}
 }
 
-static int cedrus_buf_out_validate(struct vb2_buffer *vb)
+static int rpivid_buf_out_validate(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 
@@ -411,10 +411,10 @@ static int cedrus_buf_out_validate(struct vb2_buffer *vb)
 	return 0;
 }
 
-static int cedrus_buf_prepare(struct vb2_buffer *vb)
+static int rpivid_buf_prepare(struct vb2_buffer *vb)
 {
 	struct vb2_queue *vq = vb->vb2_queue;
-	struct cedrus_ctx *ctx = vb2_get_drv_priv(vq);
+	struct rpivid_ctx *ctx = vb2_get_drv_priv(vq);
 	struct v4l2_pix_format *pix_fmt;
 
 	if (V4L2_TYPE_IS_OUTPUT(vq->type))
@@ -430,23 +430,23 @@ static int cedrus_buf_prepare(struct vb2_buffer *vb)
 	return 0;
 }
 
-static int cedrus_start_streaming(struct vb2_queue *vq, unsigned int count)
+static int rpivid_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
-	struct cedrus_ctx *ctx = vb2_get_drv_priv(vq);
-	struct cedrus_dev *dev = ctx->dev;
+	struct rpivid_ctx *ctx = vb2_get_drv_priv(vq);
+	struct rpivid_dev *dev = ctx->dev;
 	int ret = 0;
 
 	switch (ctx->src_fmt.pixelformat) {
 	case V4L2_PIX_FMT_MPEG2_SLICE:
-		ctx->current_codec = CEDRUS_CODEC_MPEG2;
+		ctx->current_codec = RPIVID_CODEC_MPEG2;
 		break;
 
 	case V4L2_PIX_FMT_H264_SLICE:
-		ctx->current_codec = CEDRUS_CODEC_H264;
+		ctx->current_codec = RPIVID_CODEC_H264;
 		break;
 
 	case V4L2_PIX_FMT_HEVC_SLICE:
-		ctx->current_codec = CEDRUS_CODEC_H265;
+		ctx->current_codec = RPIVID_CODEC_H265;
 		break;
 
 	default:
@@ -458,62 +458,62 @@ static int cedrus_start_streaming(struct vb2_queue *vq, unsigned int count)
 		ret = dev->dec_ops[ctx->current_codec]->start(ctx);
 
 	if (ret)
-		cedrus_queue_cleanup(vq, VB2_BUF_STATE_QUEUED);
+		rpivid_queue_cleanup(vq, VB2_BUF_STATE_QUEUED);
 
 	return ret;
 }
 
-static void cedrus_stop_streaming(struct vb2_queue *vq)
+static void rpivid_stop_streaming(struct vb2_queue *vq)
 {
-	struct cedrus_ctx *ctx = vb2_get_drv_priv(vq);
-	struct cedrus_dev *dev = ctx->dev;
+	struct rpivid_ctx *ctx = vb2_get_drv_priv(vq);
+	struct rpivid_dev *dev = ctx->dev;
 
 	if (V4L2_TYPE_IS_OUTPUT(vq->type) &&
 	    dev->dec_ops[ctx->current_codec]->stop)
 		dev->dec_ops[ctx->current_codec]->stop(ctx);
 
-	cedrus_queue_cleanup(vq, VB2_BUF_STATE_ERROR);
+	rpivid_queue_cleanup(vq, VB2_BUF_STATE_ERROR);
 }
 
-static void cedrus_buf_queue(struct vb2_buffer *vb)
+static void rpivid_buf_queue(struct vb2_buffer *vb)
 {
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
-	struct cedrus_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
+	struct rpivid_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 
 	v4l2_m2m_buf_queue(ctx->fh.m2m_ctx, vbuf);
 }
 
-static void cedrus_buf_request_complete(struct vb2_buffer *vb)
+static void rpivid_buf_request_complete(struct vb2_buffer *vb)
 {
-	struct cedrus_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
+	struct rpivid_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 
 	v4l2_ctrl_request_complete(vb->req_obj.req, &ctx->hdl);
 }
 
-static struct vb2_ops cedrus_qops = {
-	.queue_setup		= cedrus_queue_setup,
-	.buf_prepare		= cedrus_buf_prepare,
-	.buf_queue		= cedrus_buf_queue,
-	.buf_out_validate	= cedrus_buf_out_validate,
-	.buf_request_complete	= cedrus_buf_request_complete,
-	.start_streaming	= cedrus_start_streaming,
-	.stop_streaming		= cedrus_stop_streaming,
+static struct vb2_ops rpivid_qops = {
+	.queue_setup		= rpivid_queue_setup,
+	.buf_prepare		= rpivid_buf_prepare,
+	.buf_queue		= rpivid_buf_queue,
+	.buf_out_validate	= rpivid_buf_out_validate,
+	.buf_request_complete	= rpivid_buf_request_complete,
+	.start_streaming	= rpivid_start_streaming,
+	.stop_streaming		= rpivid_stop_streaming,
 	.wait_prepare		= vb2_ops_wait_prepare,
 	.wait_finish		= vb2_ops_wait_finish,
 };
 
-int cedrus_queue_init(void *priv, struct vb2_queue *src_vq,
+int rpivid_queue_init(void *priv, struct vb2_queue *src_vq,
 		      struct vb2_queue *dst_vq)
 {
-	struct cedrus_ctx *ctx = priv;
+	struct rpivid_ctx *ctx = priv;
 	int ret;
 
 	src_vq->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
 	src_vq->io_modes = VB2_MMAP | VB2_DMABUF;
 	src_vq->drv_priv = ctx;
-	src_vq->buf_struct_size = sizeof(struct cedrus_buffer);
+	src_vq->buf_struct_size = sizeof(struct rpivid_buffer);
 	src_vq->min_buffers_needed = 1;
-	src_vq->ops = &cedrus_qops;
+	src_vq->ops = &rpivid_qops;
 	src_vq->mem_ops = &vb2_dma_contig_memops;
 	src_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	src_vq->lock = &ctx->dev->dev_mutex;
@@ -528,9 +528,9 @@ int cedrus_queue_init(void *priv, struct vb2_queue *src_vq,
 	dst_vq->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
 	dst_vq->io_modes = VB2_MMAP | VB2_DMABUF;
 	dst_vq->drv_priv = ctx;
-	dst_vq->buf_struct_size = sizeof(struct cedrus_buffer);
+	dst_vq->buf_struct_size = sizeof(struct rpivid_buffer);
 	dst_vq->min_buffers_needed = 1;
-	dst_vq->ops = &cedrus_qops;
+	dst_vq->ops = &rpivid_qops;
 	dst_vq->mem_ops = &vb2_dma_contig_memops;
 	dst_vq->timestamp_flags = V4L2_BUF_FLAG_TIMESTAMP_COPY;
 	dst_vq->lock = &ctx->dev->dev_mutex;
