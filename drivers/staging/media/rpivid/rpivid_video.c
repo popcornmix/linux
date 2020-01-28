@@ -29,7 +29,7 @@
 #define RPIVID_MIN_WIDTH	16U
 #define RPIVID_MIN_HEIGHT	16U
 #define RPIVID_MAX_WIDTH	4096U
-#define RPIVID_MAX_HEIGHT	2304U
+#define RPIVID_MAX_HEIGHT	4096U
 
 static struct rpivid_format rpivid_formats[] = {
 	{
@@ -43,17 +43,19 @@ static struct rpivid_format rpivid_formats[] = {
 	{
 		.pixelformat	= V4L2_PIX_FMT_HEVC_SLICE,
 		.directions	= RPIVID_DECODE_SRC,
-		.capabilities	= RPIVID_CAPABILITY_H265_DEC,
 	},
 	{
-		.pixelformat	= V4L2_PIX_FMT_SUNXI_TILED_NV12,
+		.pixelformat	= V4L2_PIX_FMT_SAND8,
 		.directions	= RPIVID_DECODE_DST,
 	},
 	{
-		.pixelformat	= V4L2_PIX_FMT_NV12,
+		.pixelformat	= V4L2_PIX_FMT_SAND30,
 		.directions	= RPIVID_DECODE_DST,
-		.capabilities	= RPIVID_CAPABILITY_UNTILED,
 	},
+//	{
+//		.pixelformat	= V4L2_PIX_FMT_NV12,
+//		.directions	= RPIVID_DECODE_DST,
+//	},
 };
 
 #define RPIVID_FORMATS_COUNT	ARRAY_SIZE(rpivid_formats)
@@ -90,6 +92,12 @@ static struct rpivid_format *rpivid_find_format(u32 pixelformat, u32 directions,
 	return &rpivid_formats[i];
 }
 
+// constrian x to y,y*2
+static inline unsigned int constrain2x(unsigned int x, unsigned int y)
+{
+	return x < y ? y : x > y * 2 ? y : x;
+}
+
 void rpivid_prepare_format(struct v4l2_pix_format *pix_fmt)
 {
 	unsigned int width = pix_fmt->width;
@@ -98,10 +106,6 @@ void rpivid_prepare_format(struct v4l2_pix_format *pix_fmt)
 	unsigned int bytesperline = pix_fmt->bytesperline;
 
 	pix_fmt->field = V4L2_FIELD_NONE;
-
-	/* Limit to hardware min/max. */
-	width = clamp(width, RPIVID_MIN_WIDTH, RPIVID_MAX_WIDTH);
-	height = clamp(height, RPIVID_MIN_HEIGHT, RPIVID_MAX_HEIGHT);
 
 	switch (pix_fmt->pixelformat) {
 	case V4L2_PIX_FMT_MPEG2_SLICE:
@@ -113,37 +117,44 @@ void rpivid_prepare_format(struct v4l2_pix_format *pix_fmt)
 		sizeimage = max_t(u32, SZ_1K, sizeimage);
 		break;
 
-	case V4L2_PIX_FMT_SUNXI_TILED_NV12:
-		/* 32-aligned stride. */
-		bytesperline = ALIGN(width, 32);
+	// For SAND formats set bytesperline to column height
+	// (stride2)
+	case V4L2_PIX_FMT_SAND8:
+		// Width rounds up to columns
+		width = ALIGN(min(width, RPIVID_MAX_WIDTH), 128);
 
-		/* 32-aligned height. */
-		height = ALIGN(height, 32);
+		/* 16 aligned height - not sure we even need that */
+		height = ALIGN(height, 16);
 
-		/* Luma plane size. */
-		sizeimage = bytesperline * height;
+		/* column height
+		   Accept suggested shape if at least min & < 2 * min
+		   */
+		bytesperline = constrain2x(bytesperline, height * 3 / 2);
 
-		/* Chroma plane size. */
-		sizeimage += bytesperline * height / 2;
-
+		/* image size
+		   Again allow plausible variation in case added padding is required
+		   */
+		sizeimage = constrain2x(sizeimage, bytesperline * width);
 		break;
 
-	case V4L2_PIX_FMT_NV12:
-		/* 16-aligned stride. */
-		bytesperline = ALIGN(width, 16);
+	case V4L2_PIX_FMT_SAND30:
+		/* width in pixels (3 pels = 4 bytes) rounded to 128 byte columns */
+		width = ALIGN(((min(width, RPIVID_MAX_WIDTH) + 2) / 3), 32) * 3;
 
 		/* 16-aligned height. */
 		height = ALIGN(height, 16);
 
-		/* Luma plane size. */
-		sizeimage = bytesperline * height;
+		/* column height
+		   Accept suggested shape if at least min & < 2 * min
+		   */
+		bytesperline = constrain2x(bytesperline, height * 3 / 2);
 
-		/* Chroma plane size. */
-		sizeimage += bytesperline * height / 2;
-
+		/* image size
+		   Again allow plausible variation in case added padding is required
+		   */
+		sizeimage = constrain2x(sizeimage, bytesperline * width * 4 / 3);
 		break;
 	}
-
 	pix_fmt->width = width;
 	pix_fmt->height = height;
 
@@ -162,54 +173,118 @@ static int rpivid_querycap(struct file *file, void *priv,
 	return 0;
 }
 
-static int rpivid_enum_fmt(struct file *file, struct v4l2_fmtdesc *f,
-			   u32 direction)
+
+static int rpivid_enum_fmt_vid_out(struct file *file, void *priv,
+				   struct v4l2_fmtdesc *f)
 {
-	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
-	struct rpivid_dev *dev = ctx->dev;
-	unsigned int capabilities = dev->capabilities;
-	struct rpivid_format *fmt;
-	unsigned int i, index;
+	// Input formats
 
-	/* Index among formats that match the requested direction. */
-	index = 0;
-
-	for (i = 0; i < RPIVID_FORMATS_COUNT; i++) {
-		fmt = &rpivid_formats[i];
-
-		if (fmt->capabilities && (fmt->capabilities & capabilities) !=
-		    fmt->capabilities)
-			continue;
-
-		if (!(rpivid_formats[i].directions & direction))
-			continue;
-
-		if (index == f->index)
-			break;
-
-		index++;
-	}
-
-	/* Matched format. */
-	if (i < RPIVID_FORMATS_COUNT) {
-		f->pixelformat = rpivid_formats[i].pixelformat;
-
+	// H.265 Slice only currently
+	if (f->index == 0) {
+		f->pixelformat = V4L2_PIX_FMT_HEVC_SLICE;
 		return 0;
 	}
 
 	return -EINVAL;
 }
 
+static int rpivid_hevc_validate_sps(const struct v4l2_ctrl_hevc_sps * const sps)
+{
+	// Simplify the if statement
+	const unsigned int CtbLog2SizeY = sps->log2_min_luma_coding_block_size_minus3 + 3 +
+		sps->log2_diff_max_min_luma_coding_block_size;
+	const unsigned int MinTbLog2SizeY = sps->log2_min_luma_transform_block_size_minus2 + 2;
+	const unsigned int MaxTbLog2SizeY = MinTbLog2SizeY +
+		sps->log2_diff_max_min_luma_transform_block_size;
+
+	if (
+		// Local limitations
+		sps->pic_width_in_luma_samples < 32 ||
+		sps->pic_width_in_luma_samples > 4096 ||
+		sps->pic_height_in_luma_samples < 32 ||
+		sps->pic_height_in_luma_samples > 4096 ||
+		!(sps->bit_depth_luma_minus8 == 0 ||
+		  sps->bit_depth_luma_minus8 == 2) ||
+		sps->bit_depth_luma_minus8 != sps->bit_depth_chroma_minus8 ||
+		sps->chroma_format_idc != 1 ||
+		// Limits from H.265 7.4.3.2.1
+		sps->log2_max_pic_order_cnt_lsb_minus4 > 12 ||
+		sps->sps_max_dec_pic_buffering_minus1 > 15 ||
+		sps->sps_max_num_reorder_pics > sps->sps_max_dec_pic_buffering_minus1 ||
+		CtbLog2SizeY > 6 ||
+		MaxTbLog2SizeY > 5 ||
+		MaxTbLog2SizeY > CtbLog2SizeY ||
+		sps->max_transform_hierarchy_depth_inter > CtbLog2SizeY - MinTbLog2SizeY ||
+		sps->max_transform_hierarchy_depth_intra > CtbLog2SizeY - MinTbLog2SizeY ||
+		// ** Check pcm stuff
+		sps->num_short_term_ref_pic_sets > 64 ||
+		sps->num_long_term_ref_pics_sps > 32
+		)
+		return 0;
+	return 1;
+}
+
+static inline int is_sps_set(const struct v4l2_ctrl_hevc_sps * const sps)
+{
+	return sps->pic_width_in_luma_samples != 0;
+}
+
+static u32 pixelformat_from_sps(const struct v4l2_ctrl_hevc_sps * const sps, const int index)
+{
+	u32 pf = 0;
+
+	// Use width 0 as a signifier of unsetness
+	if (!is_sps_set(sps)) {
+		// Maybe we should just treat this as an error but for now return both
+		if (index == 0)
+			pf = V4L2_PIX_FMT_SAND8;
+		else if (index == 1)
+			pf = V4L2_PIX_FMT_SAND30;
+	}
+	else if (index == 0 && rpivid_hevc_validate_sps(sps))
+	{
+		if (sps->bit_depth_luma_minus8 == 0)
+			pf = V4L2_PIX_FMT_SAND8;
+		else if (sps->bit_depth_luma_minus8 == 2)
+			pf = V4L2_PIX_FMT_SAND30;
+	}
+
+	return pf;
+}
+
+static struct v4l2_pix_format rpivid_hevc_default_dst_fmt(struct rpivid_ctx * const ctx)
+{
+	const struct v4l2_ctrl_hevc_sps * const sps = rpivid_find_control_data(ctx,
+			V4L2_CID_MPEG_VIDEO_HEVC_SPS);
+	struct v4l2_pix_format pix_fmt = {
+		.width = sps->pic_width_in_luma_samples,
+		.height = sps->pic_height_in_luma_samples,
+		.pixelformat = pixelformat_from_sps(sps, 0)
+	};
+	rpivid_prepare_format(&pix_fmt);
+	return pix_fmt;
+}
+
+static u32 rpivid_hevc_get_dst_pixelformat(struct rpivid_ctx * const ctx, const int index)
+{
+	const struct v4l2_ctrl_hevc_sps * const sps = rpivid_find_control_data(ctx,
+			V4L2_CID_MPEG_VIDEO_HEVC_SPS);
+	return pixelformat_from_sps(sps, index);
+}
+
 static int rpivid_enum_fmt_vid_cap(struct file *file, void *priv,
 				   struct v4l2_fmtdesc *f)
 {
-	return rpivid_enum_fmt(file, f, RPIVID_DECODE_DST);
-}
+	// Output format(s)
+	struct rpivid_ctx * const ctx = rpivid_file2ctx(file);
 
-static int rpivid_enum_fmt_vid_out(struct file *file, void *priv,
-				   struct v4l2_fmtdesc *f)
-{
-	return rpivid_enum_fmt(file, f, RPIVID_DECODE_SRC);
+	const u32 pf = rpivid_hevc_get_dst_pixelformat(ctx, f->index);
+
+	if (pf == 0)
+		return -EINVAL;
+
+	f->pixelformat = pf;
+	return 0;
 }
 
 static int rpivid_g_fmt_vid_cap(struct file *file, void *priv,
@@ -217,7 +292,10 @@ static int rpivid_g_fmt_vid_cap(struct file *file, void *priv,
 {
 	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
 
+	if (!ctx->dst_fmt_set)
+		ctx->dst_fmt = rpivid_hevc_default_dst_fmt(ctx);
 	f->fmt.pix = ctx->dst_fmt;
+	v4l2_info(&ctx->dev->v4l2_dev, "%s: %dx%d priv=%u\n", __func__, ctx->dst_fmt.width, ctx->dst_fmt.height, ctx->dst_fmt.priv);
 	return 0;
 }
 
@@ -236,14 +314,23 @@ static int rpivid_try_fmt_vid_cap(struct file *file, void *priv,
 	struct rpivid_ctx *ctx = rpivid_file2ctx(file);
 	struct rpivid_dev *dev = ctx->dev;
 	struct v4l2_pix_format *pix_fmt = &f->fmt.pix;
-	struct rpivid_format *fmt =
-		rpivid_find_format(pix_fmt->pixelformat, RPIVID_DECODE_DST,
-				   dev->capabilities);
 
-	if (!fmt)
+	const struct v4l2_ctrl_hevc_sps * const sps = rpivid_find_control_data(ctx,
+			V4L2_CID_MPEG_VIDEO_HEVC_SPS);
+
+	u32 pixelformat;
+	int i;
+
+	for (i = 0; (pixelformat = pixelformat_from_sps(sps, i)) != 0; ++i) {
+		if (pix_fmt->pixelformat == pixelformat) {
+			break;
+		}
+	}
+
+	if (pixelformat == 0)
 		return -EINVAL;
 
-	pix_fmt->pixelformat = fmt->pixelformat;
+	pix_fmt->pixelformat = pixelformat;
 	rpivid_prepare_format(pix_fmt);
 
 	return 0;
@@ -256,8 +343,7 @@ static int rpivid_try_fmt_vid_out(struct file *file, void *priv,
 	struct rpivid_dev *dev = ctx->dev;
 	struct v4l2_pix_format *pix_fmt = &f->fmt.pix;
 	struct rpivid_format *fmt =
-		rpivid_find_format(pix_fmt->pixelformat, RPIVID_DECODE_SRC,
-				   dev->capabilities);
+		rpivid_find_format(pix_fmt->pixelformat, RPIVID_DECODE_SRC, 0);
 
 	if (!fmt)
 		return -EINVAL;
@@ -285,6 +371,7 @@ static int rpivid_s_fmt_vid_cap(struct file *file, void *priv,
 		return ret;
 
 	ctx->dst_fmt = f->fmt.pix;
+	ctx->dst_fmt_set = 1;
 
 	// #### FIXME
 //	rpivid_dst_format_set(dev, &ctx->dst_fmt);
@@ -308,17 +395,10 @@ static int rpivid_s_fmt_vid_out(struct file *file, void *priv,
 		return ret;
 
 	ctx->src_fmt = f->fmt.pix;
+	ctx->dst_fmt_set = 0;  // Setting src invalidates dst
 
-	switch (ctx->src_fmt.pixelformat) {
-	case V4L2_PIX_FMT_H264_SLICE:
-		vq->subsystem_flags |=
-			VB2_V4L2_FL_SUPPORTS_M2M_HOLD_CAPTURE_BUF;
-		break;
-	default:
-		vq->subsystem_flags &=
-			~VB2_V4L2_FL_SUPPORTS_M2M_HOLD_CAPTURE_BUF;
-		break;
-	}
+	vq->subsystem_flags |=
+		VB2_V4L2_FL_SUPPORTS_M2M_HOLD_CAPTURE_BUF;
 
 	/* Propagate colorspace information to capture. */
 	ctx->dst_fmt.colorspace = f->fmt.pix.colorspace;
@@ -480,6 +560,9 @@ static void rpivid_buf_queue(struct vb2_buffer *vb)
 	struct vb2_v4l2_buffer *vbuf = to_vb2_v4l2_buffer(vb);
 	struct rpivid_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
 
+//	v4l2_info(&ctx->dev->v4l2_dev,
+//			  "rpivid_buf_queue: %s: held=%d, flags=%#x\n", V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type) ? "Out" : "Cap", vbuf->is_held, vbuf->flags);
+
 	v4l2_m2m_buf_queue(ctx->fh.m2m_ctx, vbuf);
 }
 
@@ -490,10 +573,20 @@ static void rpivid_buf_request_complete(struct vb2_buffer *vb)
 	v4l2_ctrl_request_complete(vb->req_obj.req, &ctx->hdl);
 }
 
+static void rpivid_buf_finish(struct vb2_buffer *vb)
+{
+	struct rpivid_ctx *ctx = vb2_get_drv_priv(vb->vb2_queue);
+
+//	v4l2_info(&ctx->dev->v4l2_dev,
+//		  "rpivid_buf_finish: %s\n", V4L2_TYPE_IS_OUTPUT(vb->vb2_queue->type) ? "Out" : "Cap");
+}
+
+
 static struct vb2_ops rpivid_qops = {
 	.queue_setup		= rpivid_queue_setup,
 	.buf_prepare		= rpivid_buf_prepare,
 	.buf_queue		= rpivid_buf_queue,
+	.buf_finish		= rpivid_buf_finish,
 	.buf_out_validate	= rpivid_buf_out_validate,
 	.buf_request_complete	= rpivid_buf_request_complete,
 	.start_streaming	= rpivid_start_streaming,

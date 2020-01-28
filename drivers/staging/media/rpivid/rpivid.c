@@ -24,76 +24,10 @@
 
 #include "rpivid.h"
 #include "rpivid_video.h"
+#include "rpivid_hw.h"
 #include "rpivid_dec.h"
 
 static const struct rpivid_control rpivid_controls[] = {
-	{
-		.cfg = {
-			.id	= V4L2_CID_MPEG_VIDEO_MPEG2_SLICE_PARAMS,
-		},
-		.codec		= RPIVID_CODEC_MPEG2,
-		.required	= true,
-	},
-	{
-		.cfg = {
-			.id	= V4L2_CID_MPEG_VIDEO_MPEG2_QUANTIZATION,
-		},
-		.codec		= RPIVID_CODEC_MPEG2,
-		.required	= false,
-	},
-	{
-		.cfg = {
-			.id	= V4L2_CID_MPEG_VIDEO_H264_DECODE_PARAMS,
-		},
-		.codec		= RPIVID_CODEC_H264,
-		.required	= true,
-	},
-	{
-		.cfg = {
-			.id	= V4L2_CID_MPEG_VIDEO_H264_SLICE_PARAMS,
-		},
-		.codec		= RPIVID_CODEC_H264,
-		.required	= true,
-	},
-	{
-		.cfg = {
-			.id	= V4L2_CID_MPEG_VIDEO_H264_SPS,
-		},
-		.codec		= RPIVID_CODEC_H264,
-		.required	= true,
-	},
-	{
-		.cfg = {
-			.id	= V4L2_CID_MPEG_VIDEO_H264_PPS,
-		},
-		.codec		= RPIVID_CODEC_H264,
-		.required	= true,
-	},
-	{
-		.cfg = {
-			.id	= V4L2_CID_MPEG_VIDEO_H264_SCALING_MATRIX,
-		},
-		.codec		= RPIVID_CODEC_H264,
-		.required	= true,
-	},
-	{
-		.cfg = {
-			.id	= V4L2_CID_MPEG_VIDEO_H264_DECODE_MODE,
-			.max	= V4L2_MPEG_VIDEO_H264_DECODE_MODE_SLICE_BASED,
-			.def	= V4L2_MPEG_VIDEO_H264_DECODE_MODE_SLICE_BASED,
-		},
-		.codec		= RPIVID_CODEC_H264,
-		.required	= false,
-	},
-	{
-		.cfg = {
-			.id	= V4L2_CID_MPEG_VIDEO_H264_START_CODE,
-			.max	= V4L2_MPEG_VIDEO_H264_START_CODE_NONE,
-			.def	= V4L2_MPEG_VIDEO_H264_START_CODE_NONE,
-		},
-		.codec		= RPIVID_CODEC_H264,
-		.required	= false,
-	},
 	{
 		.cfg = {
 			.id	= V4L2_CID_MPEG_VIDEO_HEVC_SPS,
@@ -107,6 +41,13 @@ static const struct rpivid_control rpivid_controls[] = {
 		},
 		.codec		= RPIVID_CODEC_H265,
 		.required	= true,
+	},
+	{
+		.cfg = {
+			.id = V4L2_CID_MPEG_VIDEO_HEVC_SCALING_MATRIX,
+		},
+		.codec		= RPIVID_CODEC_H265,
+		.required	= false,
 	},
 	{
 		.cfg = {
@@ -173,7 +114,7 @@ static int rpivid_init_ctrls(struct rpivid_dev *dev, struct rpivid_ctx *ctx)
 					    NULL);
 		if (hdl->error) {
 			v4l2_err(&dev->v4l2_dev,
-				 "Failed to create new custom control\n");
+				 "Failed to create new custom control id=%#x\n", rpivid_controls[i].cfg.id);
 
 			v4l2_ctrl_handler_free(hdl);
 			kfree(ctx->ctrls);
@@ -362,10 +303,6 @@ static int rpivid_probe(struct platform_device *pdev)
 	struct video_device *vfd;
 	int ret;
 
-	dev_err(&pdev->dev, "Do rpivid probe\n");
-
-	*(volatile char *)0 = 99;
-
 	dev = devm_kzalloc(&pdev->dev, sizeof(*dev), GFP_KERNEL);
 	if (!dev)
 		return -ENOMEM;
@@ -374,9 +311,8 @@ static int rpivid_probe(struct platform_device *pdev)
 	dev->dev = &pdev->dev;
 	dev->pdev = pdev;
 
-// ######## FIXME
-	ret = 9;
-//	ret = rpivid_hw_probe(dev);
+	ret = 0;
+	ret = rpivid_hw_probe(dev);
 	if (ret) {
 		dev_err(&pdev->dev, "Failed to probe hardware\n");
 		return ret;
@@ -470,92 +406,19 @@ static int rpivid_remove(struct platform_device *pdev)
 	video_unregister_device(&dev->vfd);
 	v4l2_device_unregister(&dev->v4l2_dev);
 
-// ######## FIXME
-//	rpivid_hw_remove(dev);
+	rpivid_hw_remove(dev);
 
 	return 0;
 }
 
-#if 0
-static const struct rpivid_variant sun4i_a10_rpivid_variant = {
-	.mod_rate	= 320000000,
-};
-
-static const struct rpivid_variant sun5i_a13_rpivid_variant = {
-	.mod_rate	= 320000000,
-};
-
-static const struct rpivid_variant sun7i_a20_rpivid_variant = {
-	.mod_rate	= 320000000,
-};
-
-static const struct rpivid_variant sun8i_a33_rpivid_variant = {
-	.capabilities	= RPIVID_CAPABILITY_UNTILED,
-	.mod_rate	= 320000000,
-};
-
-static const struct rpivid_variant sun8i_h3_rpivid_variant = {
-	.capabilities	= RPIVID_CAPABILITY_UNTILED |
-			  RPIVID_CAPABILITY_H265_DEC,
-	.mod_rate	= 402000000,
-};
-
-static const struct rpivid_variant sun50i_a64_rpivid_variant = {
-	.capabilities	= RPIVID_CAPABILITY_UNTILED |
-			  RPIVID_CAPABILITY_H265_DEC,
-	.mod_rate	= 402000000,
-};
-
-static const struct rpivid_variant sun50i_h5_rpivid_variant = {
-	.capabilities	= RPIVID_CAPABILITY_UNTILED |
-			  RPIVID_CAPABILITY_H265_DEC,
-	.mod_rate	= 402000000,
-};
-
-static const struct rpivid_variant sun50i_h6_rpivid_variant = {
-	.capabilities	= RPIVID_CAPABILITY_UNTILED |
-			  RPIVID_CAPABILITY_H265_DEC,
-	.quirks		= RPIVID_QUIRK_NO_DMA_OFFSET,
-	.mod_rate	= 600000000,
-};
 
 static const struct of_device_id rpivid_dt_match[] = {
 	{
-		.compatible = "allwinner,sun4i-a10-video-engine",
-		.data = &sun4i_a10_rpivid_variant,
-	},
-	{
-		.compatible = "allwinner,sun5i-a13-video-engine",
-		.data = &sun5i_a13_rpivid_variant,
-	},
-	{
-		.compatible = "allwinner,sun7i-a20-video-engine",
-		.data = &sun7i_a20_rpivid_variant,
-	},
-	{
-		.compatible = "allwinner,sun8i-a33-video-engine",
-		.data = &sun8i_a33_rpivid_variant,
-	},
-	{
-		.compatible = "allwinner,sun8i-h3-video-engine",
-		.data = &sun8i_h3_rpivid_variant,
-	},
-	{
-		.compatible = "allwinner,sun50i-a64-video-engine",
-		.data = &sun50i_a64_rpivid_variant,
-	},
-	{
-		.compatible = "allwinner,sun50i-h5-video-engine",
-		.data = &sun50i_h5_rpivid_variant,
-	},
-	{
-		.compatible = "allwinner,sun50i-h6-video-engine",
-		.data = &sun50i_h6_rpivid_variant,
+		.compatible = "raspberrypi,rpivid-vid-decoder",
 	},
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, rpivid_dt_match);
-#endif
 
 static struct platform_driver rpivid_driver = {
 	.probe		= rpivid_probe,
@@ -563,6 +426,7 @@ static struct platform_driver rpivid_driver = {
 	.driver		= {
 		.name		= RPIVID_NAME,
 		.owner = THIS_MODULE,
+		.of_match_table	= of_match_ptr(rpivid_dt_match),
 	},
 };
 module_platform_driver(rpivid_driver);

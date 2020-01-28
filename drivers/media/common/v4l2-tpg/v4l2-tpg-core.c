@@ -309,6 +309,7 @@ bool tpg_s_fourcc(struct tpg_data *tpg, u32 fourcc)
 	case V4L2_PIX_FMT_NV21M:
 		tpg->buffers = 2;
 		/* fall through */
+	case V4L2_PIX_FMT_SAND8:
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV21:
 		tpg->vdownsampling[1] = 2;
@@ -415,6 +416,7 @@ bool tpg_s_fourcc(struct tpg_data *tpg, u32 fourcc)
 	case V4L2_PIX_FMT_HSV32:
 		tpg->twopixelsize[0] = 2 * 4;
 		break;
+	case V4L2_PIX_FMT_SAND8:
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV21:
 	case V4L2_PIX_FMT_NV12M:
@@ -1169,6 +1171,7 @@ static void gen_twopix(struct tpg_data *tpg,
 		buf[2][0] = g_u_s;
 		break;
 
+	case V4L2_PIX_FMT_SAND8:
 	case V4L2_PIX_FMT_NV12:
 	case V4L2_PIX_FMT_NV12M:
 	case V4L2_PIX_FMT_NV16:

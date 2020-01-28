@@ -31,6 +31,14 @@ void rpivid_device_run(void *priv)
 	run.src = v4l2_m2m_next_src_buf(ctx->fh.m2m_ctx);
 	run.dst = v4l2_m2m_next_dst_buf(ctx->fh.m2m_ctx);
 
+	if (!run.src || !run.dst) {
+		v4l2_err(&dev->v4l2_dev, "%s: Missing buffer: src=%p, dst=%p\n", __func__, run.src, run.dst);
+		// We are stuffed - this probably won't dig us out of our current situation but it is better than nothing
+        v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
+                         VB2_BUF_STATE_ERROR);
+		return;
+	}
+
 	/* Apply request(s) controls if needed. */
 	src_req = run.src->vb2_buf.req_obj.req;
 
@@ -65,6 +73,8 @@ void rpivid_device_run(void *priv)
 			V4L2_CID_MPEG_VIDEO_HEVC_PPS);
 		run.h265.slice_params = rpivid_find_control_data(ctx,
 			V4L2_CID_MPEG_VIDEO_HEVC_SLICE_PARAMS);
+		run.h265.scaling_matrix = rpivid_find_control_data(ctx,
+			V4L2_CID_MPEG_VIDEO_HEVC_SCALING_MATRIX);
 		break;
 
 	default:

@@ -88,6 +88,32 @@
        ((fourcc) >> 24) & 0x7f, (fourcc) & BIT(31) ? "-BE" : ""
 
 
+/**
+ * v4l2_fourcc_conv - Printf fourcc conversion specifiers for V4L2 formats
+ *
+ * Use as part of the format string. The values are obtained using
+ * @v4l2_fourcc_args macro.
+ *
+ * Example ("format" is the V4L2 pixelformat in __u32):
+ *
+ * printf("V4L2 format is: " v4l2_fourcc_conv "\n", v4l2_fourcc_args(format);
+ */
+#define v4l2_fourcc_conv "%c%c%c%c%s"
+
+/**
+ * v4l2_fourcc_args - Arguments for V4L2 fourcc format conversion
+ *
+ * @fourcc: V4L2 pixelformat, as in __u32
+ *
+ * Yields to a comma-separated list of arguments for printf that matches with
+ * conversion specifiers provided by @v4l2_fourcc_conv.
+ *
+ * Note that v4l2_fourcc_args reuses fourcc, so this can't be an expression
+ * with side-effects.
+ */
+#define v4l2_fourcc_args(fourcc)					\
+	(fourcc) & 0x7f, ((fourcc) >> 8) & 0x7f, ((fourcc) >> 16) & 0x7f, \
+	((fourcc) >> 24) & 0x7f, ((fourcc) & (1 << 31) ? "-BE" : "")
 
 /*
  *	E N U M S
@@ -739,6 +765,8 @@ struct v4l2_pix_format {
 #define V4L2_PIX_FMT_INZI     v4l2_fourcc('I', 'N', 'Z', 'I') /* Intel Planar Greyscale 10-bit and Depth 16-bit */
 #define V4L2_PIX_FMT_SUNXI_TILED_NV12 v4l2_fourcc('S', 'T', '1', '2') /* Sunxi Tiled NV12 Format */
 #define V4L2_PIX_FMT_CNF4     v4l2_fourcc('C', 'N', 'F', '4') /* Intel 4-bit packed depth confidence information */
+#define V4L2_PIX_FMT_SAND8    v4l2_fourcc('S', 'A', 'N', 'D') /* RPI 8 bit sand */
+#define V4L2_PIX_FMT_SAND30   v4l2_fourcc('S', 'D', '3', '0') /* RPI 10 bit sand 3x10 in 4 bytes */
 
 /* 10bit raw bayer packed, 32 bytes for every 25 pixels, last LSB 6 bits unused */
 #define V4L2_PIX_FMT_IPU3_SBGGR10	v4l2_fourcc('i', 'p', '3', 'b') /* IPU3 packed 10-bit BGGR bayer */

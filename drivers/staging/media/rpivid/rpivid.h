@@ -24,6 +24,8 @@
 
 #include <linux/platform_device.h>
 
+#define OPT_DEBUG_POLL_IRQ  0
+
 #define RPIVID_NAME			"rpivid"
 
 #define RPIVID_CAPABILITY_UNTILED	BIT(0)
@@ -73,6 +75,7 @@ struct rpivid_h265_run {
 	const struct v4l2_ctrl_hevc_sps			*sps;
 	const struct v4l2_ctrl_hevc_pps			*pps;
 	const struct v4l2_ctrl_hevc_slice_params	*slice_params;
+	const struct v4l2_ctrl_hevc_scaling_matrix	*scaling_matrix;
 };
 
 struct rpivid_run {
@@ -97,6 +100,24 @@ struct rpivid_buffer {
 	} codec;
 };
 
+struct rpivid_dec_state_s;
+struct rpivid_dec_env_s;
+#define RPIVID_DEC_ENV_COUNT 3
+
+struct rpivid_gptr
+{
+	size_t size;
+	__u8 * ptr;
+	dma_addr_t addr;
+	unsigned long attrs;
+};
+
+struct rpivid_dev;
+typedef void (*rpivid_irq_callback)(struct rpivid_dev * dev, void * ctx);
+
+struct rpivid_q_aux_s;
+#define RPIVID_AUX_ENT_COUNT VB2_MAX_FRAME
+
 struct rpivid_ctx {
 	struct v4l2_fh			fh;
 	struct rpivid_dev		*dev;
@@ -104,43 +125,38 @@ struct rpivid_ctx {
 	struct v4l2_pix_format		src_fmt;
 	struct v4l2_pix_format		dst_fmt;
 	enum rpivid_codec		current_codec;
+	int dst_fmt_set;
 
 	struct v4l2_ctrl_handler	hdl;
 	struct v4l2_ctrl		**ctrls;
 
-	union {
-		struct {
-			void		*mv_col_buf;
-			dma_addr_t	mv_col_buf_dma;
-			ssize_t		mv_col_buf_field_size;
-			ssize_t		mv_col_buf_size;
-			void		*pic_info_buf;
-			dma_addr_t	pic_info_buf_dma;
-			ssize_t		pic_info_buf_size;
-			void		*neighbor_info_buf;
-			dma_addr_t	neighbor_info_buf_dma;
-			void		*deblk_buf;
-			dma_addr_t	deblk_buf_dma;
-			ssize_t		deblk_buf_size;
-			void		*intra_pred_buf;
-			dma_addr_t	intra_pred_buf_dma;
-			ssize_t		intra_pred_buf_size;
-		} h264;
-		struct {
-			void		*mv_col_buf;
-			dma_addr_t	mv_col_buf_addr;
-			ssize_t		mv_col_buf_size;
-			ssize_t		mv_col_buf_unit_size;
-			void		*neighbor_info_buf;
-			dma_addr_t	neighbor_info_buf_addr;
-		} h265;
-	} codec;
+	/* Decode state - stateless decoder my *** */
+	/* state contains stuff that is only needed in phase0
+	   it could be held in dec_env but that would be wasteful
+	 */
+	struct rpivid_dec_state_s * state;
+	struct rpivid_dec_env_s * dec0;
+	struct rpivid_dec_env_s * dec1;
+	struct rpivid_dec_env_s * dec2;
+
+	spinlock_t dec_lock;
+	struct rpivid_dec_env_s * dec_free;
+	struct rpivid_dec_env_s * dec_pool;
+	// Some of these should be in dev
+	struct rpivid_gptr bitbufs[1];  // Will be 2
+	struct rpivid_gptr cmdbufs[1];  // Will be 2
+	unsigned int max_pu_msgs;
+	struct rpivid_gptr p2bufs[1];   // Will be 2
+
+	spinlock_t aux_lock;
+	struct rpivid_q_aux_s * aux_free;
+	struct rpivid_q_aux_s * aux_ents[RPIVID_AUX_ENT_COUNT];
+
+	unsigned int colmv_stride;
+	unsigned int colmv_picsize;
 };
 
 struct rpivid_dec_ops {
-	void (*irq_clear)(struct rpivid_ctx *ctx);
-	void (*irq_disable)(struct rpivid_ctx *ctx);
-	enum rpivid_irq_status (*irq_status)(struct rpivid_ctx *ctx);
 	void (*setup)(struct rpivid_ctx *ctx, struct rpivid_run *run);
 	int (*start)(struct rpivid_ctx *ctx);
 	void (*stop)(struct rpivid_ctx *ctx);
@@ -166,68 +182,17 @@ struct rpivid_dev {
 	/* Device file mutex */
 	struct mutex		dev_mutex;
 
-	void __iomem		*base;
+	void __iomem		*base_irq;
+	void __iomem		*base_h265;
 
-	struct clk		*mod_clk;
-	struct clk		*ahb_clk;
-	struct clk		*ram_clk;
-
-	struct reset_control	*rstc;
-
-	unsigned int		capabilities;
+	spinlock_t irq_lock;
+	rpivid_irq_callback irq_active1;
+	void * ctx_active1;
+	rpivid_irq_callback irq_active2;
+	void * ctx_active2;
 };
 
-extern struct rpivid_dec_ops rpivid_dec_ops_mpeg2;
-extern struct rpivid_dec_ops rpivid_dec_ops_h264;
 extern struct rpivid_dec_ops rpivid_dec_ops_h265;
-
-static inline void rpivid_write(struct rpivid_dev *dev, u32 reg, u32 val)
-{
-	writel(val, dev->base + reg);
-}
-
-static inline u32 rpivid_read(struct rpivid_dev *dev, u32 reg)
-{
-	return readl(dev->base + reg);
-}
-
-static inline dma_addr_t rpivid_buf_addr(struct vb2_buffer *buf,
-					 struct v4l2_pix_format *pix_fmt,
-					 unsigned int plane)
-{
-	dma_addr_t addr = vb2_dma_contig_plane_dma_addr(buf, 0);
-
-	return addr + (pix_fmt ? (dma_addr_t)pix_fmt->bytesperline *
-	       pix_fmt->height * plane : 0);
-}
-
-static inline dma_addr_t rpivid_dst_buf_addr(struct rpivid_ctx *ctx,
-					     int index, unsigned int plane)
-{
-	struct vb2_buffer *buf = NULL;
-	struct vb2_queue *vq;
-
-	if (index < 0)
-		return 0;
-
-	vq = v4l2_m2m_get_vq(ctx->fh.m2m_ctx, V4L2_BUF_TYPE_VIDEO_CAPTURE);
-	if (vq)
-		buf = vb2_get_buffer(vq, index);
-
-	return buf ? rpivid_buf_addr(buf, &ctx->dst_fmt, plane) : 0;
-}
-
-static inline struct rpivid_buffer *
-vb2_v4l2_to_rpivid_buffer(const struct vb2_v4l2_buffer *p)
-{
-	return container_of(p, struct rpivid_buffer, m2m_buf.vb);
-}
-
-static inline struct rpivid_buffer *
-vb2_to_rpivid_buffer(const struct vb2_buffer *p)
-{
-	return vb2_v4l2_to_rpivid_buffer(to_vb2_v4l2_buffer(p));
-}
 
 void *rpivid_find_control_data(struct rpivid_ctx *ctx, u32 id);
 
