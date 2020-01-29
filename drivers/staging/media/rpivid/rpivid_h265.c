@@ -15,6 +15,7 @@
 #include "rpivid.h"
 #include "rpivid_hw.h"
 
+#define DEBUG_TRACE_P1_CMD 0
 
 enum HEVCSliceType {
     HEVC_SLICE_B = 0,
@@ -240,7 +241,9 @@ static inline int clip_int(const int x, const int lo, const int hi)
 //////////////////////////////////////////////////////////////////////////////
 // Phase 1 command and bit FIFOs
 
+#if DEBUG_TRACE_P1_CMD
 static int p1_z = 0;
+#endif
 
 // ???? u16 addr - put in u32
 static int p1_apb_write(dec_env_t * const de, const u16 addr, const u32 data) {
@@ -250,9 +253,11 @@ static int p1_apb_write(dec_env_t * const de, const u16 addr, const u32 data) {
     de->cmd_fifo[de->cmd_len].addr = addr;
     de->cmd_fifo[de->cmd_len].data = data;
 
+#if DEBUG_TRACE_P1_CMD
     if (++p1_z < 256) {
         v4l2_info(&de->ctx->dev->v4l2_dev, "[%02x] %x %x\n", de->cmd_len, addr, data);
     }
+#endif
 
     return de->cmd_len++;
 }
@@ -868,11 +873,13 @@ static void decode_slice(dec_env_t * const de, const dec_state_t * const s, cons
     pre_slice_decode(de, s);
     WriteBitstream(de, s);
 
+#if DEBUG_TRACE_P1_CMD
     if (p1_z < 256) {
         v4l2_info(&de->ctx->dev->v4l2_dev, "TS=%d, tile=%d/%d, dss=%d, flags=%#llx\n", ctb_addr_ts,
             s->tile_id[ctb_addr_ts], s->tile_id[ctb_addr_ts-1],
             s->dependent_slice_segment_flag, sh->flags);
     }
+#endif
 
     resetQPY = ctb_addr_ts == 0
             || s->tile_id[ctb_addr_ts] != s->tile_id[ctb_addr_ts-1]
