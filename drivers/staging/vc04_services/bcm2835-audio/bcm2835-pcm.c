@@ -18,11 +18,11 @@ static const struct snd_pcm_hardware snd_bcm2835_playback_hw = {
 	.rate_min = 8000,
 	.rate_max = 192000,
 	.channels_min = 1,
-	.channels_max = 2,
-	.buffer_bytes_max = 128 * 1024,
-	.period_bytes_min = 1 * 1024,
-	.period_bytes_max = 128 * 1024,
-	.periods_min = 1,
+	.channels_max = 8,
+	.buffer_bytes_max = 512 * 1024,
+	.period_bytes_min = 8 * 1024,
+	.period_bytes_max = 512 * 1024,
+	.periods_min = 8,
 	.periods_max = 128,
 };
 
@@ -39,9 +39,9 @@ static const struct snd_pcm_hardware snd_bcm2835_playback_spdif_hw = {
 	.channels_min = 2,
 	.channels_max = 8,
 	.buffer_bytes_max = 512 * 1024,
-	.period_bytes_min = 1 * 1024,
+	.period_bytes_min = 8 * 1024,
 	.period_bytes_max = 512 * 1024,
-	.periods_min = 1,
+	.periods_min = 8,
 	.periods_max = 128,
 };
 
@@ -364,7 +364,7 @@ int snd_bcm2835_new_pcm(struct bcm2835_chip *chip, const char *name,
 			&snd_bcm2835_playback_ops);
 
 	snd_pcm_lib_preallocate_pages_for_all(pcm, SNDRV_DMA_TYPE_DEV,
-		chip->card->dev, 128 * 1024, 128 * 1024);
+		chip->card->dev, 512 * 1024, 512 * 1024);
 
 	if (spdif)
 		chip->pcm_spdif = pcm;
