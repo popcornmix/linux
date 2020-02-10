@@ -158,6 +158,11 @@ enum rpi_firmware_property_tag {
 	RPI_FIRMWARE_GET_DMA_CHANNELS =                       0x00060001,
 };
 
+struct rpi_firmware_get_clocks_response {
+	__le32	parent;
+	__le32	id;
+};
+
 #define GET_DISPLAY_SETTINGS_PAYLOAD_SIZE 64
 
 #if IS_ENABLED(CONFIG_RASPBERRYPI_FIRMWARE)
