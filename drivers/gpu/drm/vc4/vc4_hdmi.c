@@ -163,6 +163,45 @@ static void vc4_hdmi_connector_reset(struct drm_connector *connector)
 	drm_atomic_helper_connector_tv_reset(connector);
 }
 
+static bool hdr_metadata_equal(const struct drm_connector_state *old_state,
+			       const struct drm_connector_state *new_state)
+{
+	struct drm_property_blob *old_blob = old_state->hdr_output_metadata;
+	struct drm_property_blob *new_blob = new_state->hdr_output_metadata;
+
+	if (!old_blob || !new_blob)
+		return old_blob == new_blob;
+
+	if (old_blob->length != new_blob->length)
+		return false;
+
+	return !memcmp(old_blob->data, new_blob->data, old_blob->length);
+}
+
+static int vc4_hdmi_connector_atomic_check(struct drm_connector *connector,
+					   struct drm_atomic_state *state)
+{
+	struct drm_connector_state *old_state =
+			drm_atomic_get_old_connector_state(state, connector);
+	struct drm_connector_state *new_state =
+			drm_atomic_get_new_connector_state(state, connector);
+	struct drm_crtc *crtc = new_state->crtc;
+	struct drm_crtc_state *crtc_state;
+
+	if (!crtc)
+		return 0;
+
+	if (!hdr_metadata_equal(old_state, new_state)) {
+		crtc_state = drm_atomic_get_crtc_state(state, crtc);
+		if (IS_ERR(crtc_state))
+			return PTR_ERR(crtc_state);
+
+		crtc_state->mode_changed = true;
+	}
+
+	return 0;
+}
+
 static const struct drm_connector_funcs vc4_hdmi_connector_funcs = {
 	.detect = vc4_hdmi_connector_detect,
 	.fill_modes = drm_helper_probe_single_connector_modes,
@@ -174,6 +213,7 @@ static const struct drm_connector_funcs vc4_hdmi_connector_funcs = {
 
 static const struct drm_connector_helper_funcs vc4_hdmi_connector_helper_funcs = {
 	.get_modes = vc4_hdmi_connector_get_modes,
+	.atomic_check = vc4_hdmi_connector_atomic_check,
 };
 
 static int vc4_hdmi_connector_init(struct drm_device *dev,
@@ -193,6 +233,10 @@ static int vc4_hdmi_connector_init(struct drm_device *dev,
 		return ret;
 
 	drm_connector_attach_tv_margin_properties(connector);
+
+	drm_object_attach_property(&connector->base,
+				   connector->dev->mode_config.hdr_output_metadata_property,
+				   0);
 
 	connector->polled = (DRM_CONNECTOR_POLL_CONNECT |
 			     DRM_CONNECTOR_POLL_DISCONNECT);
@@ -274,6 +318,7 @@ static void vc4_hdmi_write_infoframe(struct drm_encoder *encoder,
 		   HDMI_READ(HDMI_RAM_PACKET_CONFIG) | BIT(packet_id));
 	ret = wait_for((HDMI_READ(HDMI_RAM_PACKET_STATUS) &
 			BIT(packet_id)), 100);
+
 	if (ret)
 		DRM_ERROR("Failed to wait for infoframe to start: %d\n", ret);
 }
@@ -342,10 +387,28 @@ static void vc4_hdmi_set_audio_infoframe(struct drm_encoder *encoder)
 	vc4_hdmi_write_infoframe(encoder, &frame);
 }
 
+static void vc4_hdmi_set_hdr_infoframe(struct drm_encoder *encoder)
+{
+	struct vc4_hdmi *vc4_hdmi = encoder_to_vc4_hdmi(encoder);
+	const struct drm_connector_state *conn_state =
+						vc4_hdmi->connector.state;
+	union hdmi_infoframe frame;
+	ssize_t err;
+
+	err = drm_hdmi_infoframe_set_hdr_metadata(&frame.drm, conn_state);
+	if (err < 0) {
+		vc4_hdmi_stop_packet(encoder, HDMI_INFOFRAME_TYPE_DRM);
+		return;
+	}
+
+	vc4_hdmi_write_infoframe(encoder, &frame);
+}
+
 static void vc4_hdmi_set_infoframes(struct drm_encoder *encoder)
 {
 	vc4_hdmi_set_avi_infoframe(encoder);
 	vc4_hdmi_set_spd_infoframe(encoder);
+	vc4_hdmi_set_hdr_infoframe(encoder);
 }
 
 static void vc4_hdmi_encoder_disable(struct drm_encoder *encoder)
@@ -1592,6 +1655,7 @@ static int vc4_hdmi_bind(struct device *dev, struct device *master, void *data)
 
 		HDMI_WRITE(HDMI_M_CTL, VC4_HD_M_ENABLE);
 	}
+
 	pm_runtime_enable(dev);
 
 	drm_encoder_init(drm, encoder, &vc4_hdmi_encoder_funcs,
