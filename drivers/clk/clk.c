@@ -4249,13 +4249,18 @@ struct clk *of_clk_src_onecell_get(struct of_phandle_args *clkspec, void *data)
 {
 	struct clk_onecell_data *clk_data = data;
 	unsigned int idx = clkspec->args[0];
+	struct clk *clk;
 
 	if (idx >= clk_data->clk_num) {
 		pr_err("%s: invalid clock index %u\n", __func__, idx);
 		return ERR_PTR(-EINVAL);
 	}
 
-	return clk_data->clks[idx];
+	clk = clk_data->clks[idx];
+	if (!clk)
+		return ERR_PTR(-ENODEV);
+
+	return clk;
 }
 EXPORT_SYMBOL_GPL(of_clk_src_onecell_get);
 
@@ -4264,13 +4269,18 @@ of_clk_hw_onecell_get(struct of_phandle_args *clkspec, void *data)
 {
 	struct clk_hw_onecell_data *hw_data = data;
 	unsigned int idx = clkspec->args[0];
+	struct clk_hw *hw;
 
 	if (idx >= hw_data->num) {
 		pr_err("%s: invalid index %u\n", __func__, idx);
 		return ERR_PTR(-EINVAL);
 	}
 
-	return hw_data->hws[idx];
+	hw = hw_data->hws[idx];
+	if (!hw)
+		return ERR_PTR(-ENODEV);
+
+	return hw;
 }
 EXPORT_SYMBOL_GPL(of_clk_hw_onecell_get);
 
