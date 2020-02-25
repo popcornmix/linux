@@ -1774,7 +1774,7 @@ static int vc4_hdmi_dev_remove(struct platform_device *pdev)
 	return 0;
 }
 
-struct vc4_hdmi_variant bcm2835_variant = {
+static const struct vc4_hdmi_variant bcm2835_variant = {
 	.max_pixel_clock	= 148500000,
 	.audio_available	= true,
 	.cec_available		= true,
