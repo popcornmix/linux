@@ -324,7 +324,7 @@ static struct clk_hw *raspberrypi_clk_register(struct raspberrypi_clk *rpi,
 		return hw;
 	}
 
-	data = devm_kzalloc(rpi->dev, sizeof(data), GFP_KERNEL);
+	data = devm_kzalloc(rpi->dev, sizeof(*data), GFP_KERNEL);
 	if (!data)
 		return ERR_PTR(-ENOMEM);
 	data->rpi = rpi;
