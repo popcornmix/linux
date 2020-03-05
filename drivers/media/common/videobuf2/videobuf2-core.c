@@ -2074,8 +2074,8 @@ static int __find_plane_by_offset(struct vb2_queue *q, unsigned long off,
 }
 
 int vb2_core_expbuf_dmabuf(struct vb2_queue *q, unsigned int type,
-			   unsigned int index, unsigned int plane,
-			   unsigned int flags, struct dma_buf **dmabuf)
+                          unsigned int index, unsigned int plane,
+                          unsigned int flags, struct dma_buf **dmabuf)
 {
 	struct vb2_buffer *vb = NULL;
 	struct vb2_plane *vb_plane;
@@ -2134,7 +2134,7 @@ int vb2_core_expbuf_dmabuf(struct vb2_queue *q, unsigned int type,
 EXPORT_SYMBOL_GPL(vb2_core_expbuf_dmabuf);
 
 int vb2_core_expbuf(struct vb2_queue *q, int *fd, unsigned int type,
-		    unsigned int index, unsigned int plane, unsigned int flags)
+                   unsigned int index, unsigned int plane, unsigned int flags)
 {
 	struct dma_buf *dbuf;
 	int ret;
