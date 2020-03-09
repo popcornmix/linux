@@ -193,6 +193,10 @@ void rpivid_hw_irq_active1_claim(struct rpivid_dev *dev,
 void rpivid_hw_irq_active1_irq(struct rpivid_dev *dev,
                               rpivid_hw_irq_ent *ient,
                               rpivid_irq_callback irq_cb, void * ctx);
+// May only be called in irq cb
+void rpivid_hw_irq_active1_thread(struct rpivid_dev *dev,
+                                rpivid_hw_irq_ent *ient,
+                                rpivid_irq_callback thread_cb, void * ctx);
 
 // Auto release once all CBs called
 void rpivid_hw_irq_active2_claim(struct rpivid_dev *dev,

@@ -148,8 +148,9 @@ struct rpivid_hw_irq_ctrl {
 	struct rpivid_hw_irq_ent * claim;
 	struct rpivid_hw_irq_ent * tail;
 
-	struct rpivid_hw_irq_ent * irq;  // Ent for pending irq - also prevents sched
-	int no_sched;  // Non-zero => do not start a new job - outer layer sched pending
+	struct rpivid_hw_irq_ent * irq;		// Ent for pending irq - also prevents sched
+	int			no_sched;	// Non-zero => do not start a new job - outer layer sched pending
+	bool			thread_reqed;	// Thread cb requested
 
 };
 

@@ -1603,11 +1603,14 @@ static void phase2_claimed(struct rpivid_dev * const dev, void * v)
     apb_write(dev, RPI_NUMROWS, de->PicHeightInCtbsY);
 }
 
-static void cb_phase1(struct rpivid_dev * const dev, void * v)
+static void phase1_thread(struct rpivid_dev * const dev, void * v)
 {
     dec_env_t * const de = v;
+
     struct rpivid_ctx * const ctx = de->ctx;
     int status;
+
+    v4l2_info(&dev->v4l2_dev, "%s\n", __func__);
 
     status = check_status(dev);
     if (status != 0)
@@ -1640,6 +1643,15 @@ fail:
     v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
                      VB2_BUF_STATE_ERROR);
     return;
+}
+
+static void cb_phase1(struct rpivid_dev * const dev, void * v)
+{
+    dec_env_t * const de = v;
+
+    v4l2_info(&dev->v4l2_dev, "%s\n", __func__);
+
+    rpivid_hw_irq_active1_thread(dev, &de->irq_ent, phase1_thread, de);
 }
 
 static void phase1_claimed(struct rpivid_dev * const dev, void * v)
