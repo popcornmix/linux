@@ -742,6 +742,10 @@ static u32 vc4_hdmi_channel_map(struct vc4_hdmi *vc4_hdmi, u32 channel_mask)
 	int i;
 	u32 channel_map = 0;
 
+	/* hack: return the mapping expected by kodi until we have a way of configuring this */
+	if (channel_mask == 0xff)
+		return 0xb13f88;
+
 	for (i = 0; i < 8; i++) {
 		if (channel_mask & BIT(i))
 			channel_map |= i << (3 * i);
@@ -753,6 +757,10 @@ static u32 vc5_hdmi_channel_map(struct vc4_hdmi *vc4_hdmi, u32 channel_mask)
 {
 	int i;
 	u32 channel_map = 0;
+
+	/* hack: return the mapping expected by kodi until we have a way of configuring this */
+	if (channel_mask == 0xff)
+		return 0x54237610;
 
 	for (i = 0; i < 8; i++) {
 		if (channel_mask & BIT(i))
