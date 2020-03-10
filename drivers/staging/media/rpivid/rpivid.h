@@ -116,10 +116,10 @@ struct rpivid_ctx {
 	// Some of these should be in dev
 	struct rpivid_gptr bitbufs[1];  // Will be 2
 	struct rpivid_gptr cmdbufs[1];  // Will be 2
-	unsigned int max_pu_msgs;
 	unsigned int p2idx;
 	atomic_t p2out;
-	struct rpivid_gptr p2bufs[RPIVID_P2BUF_COUNT];   // Will be 2
+	struct rpivid_gptr pu_bufs[RPIVID_P2BUF_COUNT];
+	struct rpivid_gptr coeff_bufs[RPIVID_P2BUF_COUNT];
 
 	spinlock_t aux_lock;
 	struct rpivid_q_aux_s * aux_free;

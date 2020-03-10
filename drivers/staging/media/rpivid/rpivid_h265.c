@@ -29,11 +29,6 @@ enum HEVCLayer {
 };
 
 
-static inline unsigned int rnd64(const unsigned int x)
-{
-    return (x + 63) & ~63U;
-}
-
 static int gptr_alloc(struct rpivid_dev * const dev,
                       struct rpivid_gptr * gptr, size_t size, unsigned long attrs)
 {
@@ -52,6 +47,57 @@ static void gptr_free(struct rpivid_dev * const dev, struct rpivid_gptr * const 
     gptr->ptr = NULL;
     gptr->addr = 0;
     gptr->attrs = 0;
+}
+
+/* Realloc but do not copy */
+static int gptr_realloc_new(struct rpivid_dev * const dev, struct rpivid_gptr * const gptr, size_t size)
+{
+    if (size == gptr->size)
+        return 0;
+
+    if (gptr->ptr != NULL)
+        dma_free_attrs(dev->dev, gptr->size, gptr->ptr, gptr->addr, gptr->attrs);
+
+    gptr->addr = 0;
+    gptr->size = size;
+    gptr->ptr = dma_alloc_attrs(dev->dev, gptr->size, &gptr->addr, GFP_KERNEL, gptr->attrs);
+    return gptr->ptr == NULL ? -ENOMEM : 0;
+}
+
+/* floor(log2(x)) */
+static unsigned int log2_size(size_t x)
+{
+    unsigned int n = 0;
+    if (x & ~0xffff) {
+        n += 16;
+        x >>= 16;
+    }
+    if (x & ~0xff) {
+        n += 8;
+        x >>= 8;
+    }
+    if (x & ~0xf) {
+        n += 4;
+        x >>= 4;
+    }
+    if (x & ~3) {
+        n += 2;
+        x >>= 2;
+    }
+    return (x & ~1) ? n + 1 : n;
+}
+
+static size_t round_up_size(const size_t x)
+{
+    // Admit no size < 256
+    const unsigned int n = x < 256 ? 8 : log2_size(x) - 1;
+
+    return x >= (3 << n) ? 4 << n : (3 << n);
+}
+
+static size_t next_size(const size_t x)
+{
+    return round_up_size(x + 1);
 }
 
 #define NUM_SCALING_FACTORS 4064  /* Not a typo = 0xbe0 + 0x400 */
@@ -148,6 +194,7 @@ typedef struct rpivid_dec_env_s {
 
     rpivid_decode_state_t state;
     unsigned int    decode_order;
+    int             p1_status;   /* P1 status - what to realloc */
 
     int             phase_no;           // Current phase (i.e. the last one we waited for)
     struct dec_env_s * phase_wait_q_next;
@@ -180,9 +227,9 @@ typedef struct rpivid_dec_env_s {
     u32 pu_stride;
     u32 coeff_stride;
 
-    const struct rpivid_gptr * bit_copy_gptr;
+    struct rpivid_gptr * bit_copy_gptr;
     size_t    bit_copy_len;
-    const struct rpivid_gptr * cmd_copy_gptr;
+    struct rpivid_gptr * cmd_copy_gptr;
 
     u16        slice_msgs[2*HEVC_MAX_REFS*8+3];
     u8         scaling_factors[NUM_SCALING_FACTORS];
@@ -1104,10 +1151,12 @@ static int updated_ps(dec_state_t * const s)
     return 0;
 }
 
-static void frame_end(dec_env_t * const de, const dec_state_t * const s)
+static int frame_end(struct rpivid_dev * const dev, dec_env_t * const de, const dec_state_t * const s)
 {
     const unsigned int last_x = s->col_bd[s->num_tile_columns] - 1;
     const unsigned int last_y = s->row_bd[s->num_tile_rows]-1;
+    size_t cmd_size;
+
     if ((s->pps.flags & V4L2_HEVC_PPS_FLAG_ENTROPY_CODING_SYNC_ENABLED) != 0) {
         if (de->wpp_entry_x<2 && de->PicWidthInCtbsY>2)
             wpp_pause(de, last_y);
@@ -1115,17 +1164,27 @@ static void frame_end(dec_env_t * const de, const dec_state_t * const s)
     p1_apb_write(de, RPI_STATUS, 1 + (last_x<<5) + (last_y<<18));
 
     // Copy commands out to dma buf
-    memcpy(de->cmd_copy_gptr->ptr, de->cmd_fifo, de->cmd_len * sizeof(de->cmd_fifo[0]));
 
-    // End of Phase 0
+    cmd_size = de->cmd_len * sizeof(de->cmd_fifo[0]);
 
+    if (!de->cmd_copy_gptr->ptr || cmd_size > de->cmd_copy_gptr->size) {
+        size_t cmd_alloc = round_up_size(cmd_size);
+        if (gptr_realloc_new(dev, de->cmd_copy_gptr, cmd_alloc)) {
+            v4l2_err(&dev->v4l2_dev, "Alloc cmd buffer (%d): FAILED\n", cmd_alloc);
+            return -ENOMEM;
+        }
+        v4l2_info(&dev->v4l2_dev, "Alloc cmd buffer (%d): OK\n", cmd_alloc);
+    }
+
+    memcpy(de->cmd_copy_gptr->ptr, de->cmd_fifo, cmd_size);
+    return 0;
 }
 
 static void setup_colmv(struct rpivid_ctx * const ctx, struct rpivid_run *run, dec_state_t * const s)
 {
-    ctx->colmv_stride = rnd64(s->sps.pic_width_in_luma_samples);
+    ctx->colmv_stride = ALIGN(s->sps.pic_width_in_luma_samples, 64);
     ctx->colmv_picsize = ctx->colmv_stride *
-        (rnd64(s->sps.pic_height_in_luma_samples) >> 4);
+        (ALIGN(s->sps.pic_height_in_luma_samples, 64) >> 4);
 }
 
 // Can be called from irq context
@@ -1371,6 +1430,32 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx,
             v4l2_warn(&dev->v4l2_dev, "New frame but segment_addr=%d\n", sh->slice_segment_addr);
             goto fail;
         }
+
+        /* Allocate a bitbuf if we need one - don't need one if single
+         * slice as we can use the src buf directly
+         */
+        if (!s->frame_end && !de->bit_copy_gptr->ptr) {
+            const size_t wxh = s->sps.pic_width_in_luma_samples *
+                               s->sps.pic_height_in_luma_samples;
+            size_t bits_alloc;
+
+            // Annex A gives a min compression of 2 @ lvl 3.1 (wxh <= 983040)
+            // and min 4 thereafter but avoid the odity of 983041 having a
+            // lower limit than 983040. Multiply by 3/2 for 4:2:0
+            bits_alloc = wxh < 983040 ? wxh * 3 / 4 :
+                wxh < 983040 * 2 ? 983040 * 3 / 4 :
+                    wxh * 3 / 8;
+            bits_alloc = round_up_size(bits_alloc);
+
+            if (gptr_alloc(dev, de->bit_copy_gptr,
+                           bits_alloc,
+                           DMA_ATTR_FORCE_CONTIGUOUS) != 0)
+            {
+                v4l2_err(&dev->v4l2_dev, "Unable to alloc buf (%d) for bit copy\n", bits_alloc);
+                goto fail;
+            }
+            v4l2_info(&dev->v4l2_dev, "Alloc buf (%d) for bit copy OK\n", bits_alloc);
+        }
 	}
 
     // Pre calc a few things
@@ -1423,7 +1508,8 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx,
         }
 
 //        v4l2_info(&dev->v4l2_dev, "rpivid_h265_end of frame\n");
-        frame_end(de, s);
+        if (frame_end(dev, de, s))
+            goto fail;
 
         // Assume that we get exactly the same DPB for every slice
         // it makes no real sense otherwise
@@ -1513,15 +1599,17 @@ fail:
 
 
 // Returns:
-// -2 Other error
-// -1 Out of coeff space
+// -1 Other error
 //  0  OK
-//  1  Out of PU space
+// >0  Out of space (bitmask)
+
+#define STATUS_COEFF_EXHAUSTED 8
+#define STATUS_PU_EXHAUSTED    16
 
 static int check_status(const struct rpivid_dev * const dev) {
     const uint32_t cfstatus = apb_read(dev, RPI_CFSTATUS);
     const uint32_t cfnum = apb_read(dev, RPI_CFNUM);
-    const uint32_t status = apb_read(dev, RPI_STATUS);
+    uint32_t status = apb_read(dev, RPI_STATUS);
 
 //    v4l2_info(&dev->v4l2_dev, "%s: cfs=%#x, cfn=%#x, s=%#x\n", __func__, cfstatus, cfnum, status);
 
@@ -1530,13 +1618,11 @@ static int check_status(const struct rpivid_dev * const dev) {
     if (cfstatus == cfnum)
         return 0;
 
-    if ((status & 8) != 0)
-        return -1;
+    status &= (STATUS_PU_EXHAUSTED | STATUS_COEFF_EXHAUSTED);
+    if (status)
+        return status;
 
-    if ((status & 0x10) != 0)
-        return 1;
-
-    return -2;
+    return -1;
 }
 
 static void cb_phase2(struct rpivid_dev * const dev, void * v)
@@ -1603,20 +1689,58 @@ static void phase2_claimed(struct rpivid_dev * const dev, void * v)
     apb_write(dev, RPI_NUMROWS, de->PicHeightInCtbsY);
 }
 
+static void phase1_claimed(struct rpivid_dev * const dev, void * v);
+
 static void phase1_thread(struct rpivid_dev * const dev, void * v)
 {
     dec_env_t * const de = v;
-
     struct rpivid_ctx * const ctx = de->ctx;
-    int status;
 
-    v4l2_info(&dev->v4l2_dev, "%s\n", __func__);
+    struct rpivid_gptr * const pu_gptr = ctx->pu_bufs + ctx->p2idx;
+    struct rpivid_gptr * const coeff_gptr = ctx->coeff_bufs + ctx->p2idx;
 
-    status = check_status(dev);
-    if (status != 0)
+    if (de->p1_status & STATUS_PU_EXHAUSTED) {
+        if (gptr_realloc_new(dev, pu_gptr, next_size(pu_gptr->size))) {
+            v4l2_err(&dev->v4l2_dev, "%s: PU realloc (%#x) failed\n", __func__, pu_gptr->size);
+            goto fail;
+        }
+        v4l2_info(&dev->v4l2_dev, "%s: PU realloc (%#x) OK\n", __func__, pu_gptr->size);
+    }
+
+    if (de->p1_status & STATUS_COEFF_EXHAUSTED) {
+        if (gptr_realloc_new(dev, coeff_gptr, next_size(coeff_gptr->size))) {
+            v4l2_err(&dev->v4l2_dev, "%s: Coeff realloc (%#x) failed\n", __func__, coeff_gptr->size);
+            goto fail;
+        }
+        v4l2_info(&dev->v4l2_dev, "%s: Coeff realloc (%#x) OK\n", __func__, coeff_gptr->size);
+    }
+
+    phase1_claimed(dev, de);
+    return;
+
+fail:
+    dec_env_delete(ctx, de);
+    v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
+                     VB2_BUF_STATE_ERROR);
+}
+
+/* Always called in irq context (this is good) */
+static void cb_phase1(struct rpivid_dev * const dev, void * v)
+{
+    dec_env_t * const de = v;
+    struct rpivid_ctx * const ctx = de->ctx;
+
+    de->p1_status = check_status(dev);
+    if (de->p1_status != 0)
     {
-        v4l2_err(&dev->v4l2_dev, "%s: Post wait: %d\n", __func__, status);
-        goto fail;
+        v4l2_err(&dev->v4l2_dev, "%s: Post wait: %#x\n", __func__, de->p1_status);
+
+        if (de->p1_status < 0)
+            goto fail;
+
+        /* Need to realloc - push onto a thread rather than IRQ */
+        rpivid_hw_irq_active1_thread(dev, &de->irq_ent, phase1_thread, de);
+        return;
     }
 
     de->frame_buf = v4l2_m2m_cap_buf_detach(dev->m2m_dev, ctx->fh.m2m_ctx);
@@ -1642,34 +1766,22 @@ fail:
     dec_env_delete(ctx, de);
     v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
                      VB2_BUF_STATE_ERROR);
-    return;
-}
-
-static void cb_phase1(struct rpivid_dev * const dev, void * v)
-{
-    dec_env_t * const de = v;
-
-    v4l2_info(&dev->v4l2_dev, "%s\n", __func__);
-
-    rpivid_hw_irq_active1_thread(dev, &de->irq_ent, phase1_thread, de);
 }
 
 static void phase1_claimed(struct rpivid_dev * const dev, void * v)
 {
-    // (Re-)allocate PU/COEFF stream space
-	dec_env_t * const de = v;
+    dec_env_t * const de = v;
     struct rpivid_ctx * const ctx = de->ctx;
 
-    const struct rpivid_gptr * const p2gptr = ctx->p2bufs + ctx->p2idx;
-    unsigned int pu_size;
+    const struct rpivid_gptr * const pu_gptr = ctx->pu_bufs + ctx->p2idx;
+    const struct rpivid_gptr * const coeff_gptr = ctx->coeff_bufs + ctx->p2idx;
 
-    de->pu_base_vc = p2gptr->addr;
-    de->pu_stride = rnd64(ctx->max_pu_msgs * 2 * de->PicWidthInCtbsY);
-    pu_size = de->pu_stride * de->PicHeightInCtbsY;
+    de->pu_base_vc = pu_gptr->addr;
+    de->pu_stride =  ALIGN_DOWN(pu_gptr->size / de->PicHeightInCtbsY, 64);
 
     // Allocate all remaining space to coeff
-    de->coeff_base_vc = de->pu_base_vc + pu_size;
-    de->coeff_stride = ((p2gptr->size - pu_size) / de->PicHeightInCtbsY) & ~63;  // Round down to multiple of 64
+    de->coeff_base_vc = coeff_gptr->addr;
+    de->coeff_stride = ALIGN_DOWN(coeff_gptr->size / de->PicHeightInCtbsY, 64);
 
     apb_write_vc_addr(dev, RPI_PUWBASE, de->pu_base_vc);
     apb_write_vc_len(dev, RPI_PUWSTRIDE, de->pu_stride);
@@ -1687,8 +1799,6 @@ static void phase1_claimed(struct rpivid_dev * const dev, void * v)
     // And start the h/w
     apb_write_vc_addr(dev, RPI_CFBASE, de->cmd_copy_gptr->addr);
     mb();
-
-    return;
 }
 
 static void dec_state_delete(struct rpivid_ctx * const ctx)
@@ -1734,20 +1844,35 @@ static void rpivid_h265_stop(struct rpivid_ctx *ctx)
         gptr_free(dev, ctx->bitbufs + i);
     for (i = 0; i != ARRAY_SIZE(ctx->cmdbufs); ++i)
         gptr_free(dev, ctx->cmdbufs + i);
-    for (i = 0; i != ARRAY_SIZE(ctx->p2bufs); ++i)
-        gptr_free(dev, ctx->p2bufs + i);
+    for (i = 0; i != ARRAY_SIZE(ctx->pu_bufs); ++i)
+        gptr_free(dev, ctx->pu_bufs + i);
+    for (i = 0; i != ARRAY_SIZE(ctx->coeff_bufs); ++i)
+        gptr_free(dev, ctx->coeff_bufs + i);
 }
-
-#define RPIVID_BIT_BUF_SIZE (4 * 1024 * 1024)
-#define RPIVID_CMD_BUF_SIZE (4 * 1024 * 1024)
-#define RPIVID_P2_BUF_SIZE  (16 * 1024 * 1024)
 
 static int rpivid_h265_start(struct rpivid_ctx *ctx)
 {
 	struct rpivid_dev * const dev = ctx->dev;
     unsigned int i;
+    unsigned int w = ctx->dst_fmt.width;
+    unsigned int h = ctx->dst_fmt.height;
+    unsigned int wxh;
+    size_t pu_alloc;
+    size_t coeff_alloc;
 
-	v4l2_info(&dev->v4l2_dev, "rpivid_h265_start\n");
+    // Generate a sanitised WxH for memory alloc
+    // Assume HD if unset
+    if (w == 0)
+        w = 1920;
+    if (w > 4096)
+        w = 4096;
+    if (h == 0)
+        w = 1088;
+    if (h > 4096)
+        h = 4096;
+    wxh = w * h;
+
+    v4l2_info(&dev->v4l2_dev, "rpivid_h265_start (%dx%d)\n", ctx->dst_fmt.width, ctx->dst_fmt.height);
 
 	ctx->dec0 = NULL;
 	if ((ctx->state = dec_state_new()) == NULL)
@@ -1762,27 +1887,28 @@ static int rpivid_h265_start(struct rpivid_ctx *ctx)
         goto fail;
     }
 
-    ctx->max_pu_msgs = 768; // 7.2 says at most 1611 messages per CTU
-
-    for (i = 0; i != ARRAY_SIZE(ctx->bitbufs); ++i)
-    {
-        if (gptr_alloc(dev, ctx->bitbufs + i,
-                       RPIVID_BIT_BUF_SIZE,
-                       DMA_ATTR_FORCE_CONTIGUOUS) != 0)
-            goto fail;
-    }
+    // 16k is plenty for most purposes but we will realloc if needed
     for (i = 0; i != ARRAY_SIZE(ctx->cmdbufs); ++i)
     {
         if (gptr_alloc(dev, ctx->cmdbufs + i,
-                       RPIVID_CMD_BUF_SIZE,
+                       0x4000,
                        DMA_ATTR_FORCE_CONTIGUOUS) != 0)
             goto fail;
     }
-    for (i = 0; i != ARRAY_SIZE(ctx->p2bufs); ++i)
+
+    // Finger in the air PU & Coeff alloc
+    // Will be realloced if too small
+    coeff_alloc = round_up_size(wxh);
+    pu_alloc = round_up_size(wxh / 4);
+    for (i = 0; i != ARRAY_SIZE(ctx->pu_bufs); ++i)
     {
         // Don't actually need a kernel mapping here
-        if (gptr_alloc(dev, ctx->p2bufs + i,
-                       RPIVID_P2_BUF_SIZE,
+        if (gptr_alloc(dev, ctx->pu_bufs + i,
+                       pu_alloc,
+                       DMA_ATTR_FORCE_CONTIGUOUS | DMA_ATTR_NO_KERNEL_MAPPING) != 0)
+            goto fail;
+        if (gptr_alloc(dev, ctx->coeff_bufs + i,
+                       coeff_alloc,
                        DMA_ATTR_FORCE_CONTIGUOUS | DMA_ATTR_NO_KERNEL_MAPPING) != 0)
             goto fail;
     }
