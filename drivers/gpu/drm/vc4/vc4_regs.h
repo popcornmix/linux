@@ -527,6 +527,9 @@
 /* If set, generates CTS values based on N, audio clock, and video
  * clock.  N must be divisible by 128.
  */
+
+# define VC4_HDMI_CRP_CFG_INC_N_COUNT_BY_4_ON_HBR_MODE	BIT(27)
+# define VC4_HDMI_CRP_CFG_USE_MAI_BUS_SYNC_FOR_CTS_GENERATION	BIT(26)
 # define VC4_HDMI_CRP_CFG_EXTERNAL_CTS_EN	BIT(24)
 # define VC4_HDMI_CRP_CFG_N_MASK		VC4_MASK(19, 0)
 # define VC4_HDMI_CRP_CFG_N_SHIFT		0
