@@ -898,6 +898,45 @@ static void vc4_hdmi_audio_shutdown(struct snd_pcm_substream *substream,
 	vc4_hdmi->audio.substream = NULL;
 }
 
+static int sample_rate_to_mai_fmt(int samplerate)
+{
+   switch(samplerate)
+   {
+      case 8000:
+         return 1;
+      case 11025:
+         return 2;
+      case 12000:
+         return 3;
+      case 16000:
+         return 4;
+      case 22050:
+         return 5;
+      case 24000:
+         return 6;
+      case 32000:
+         return 7;
+      case 44100:
+         return 8;
+      case 48000:
+         return 9;
+      case 64000:
+         return 10;
+      case 88200:
+         return 11;
+      case 96000:
+         return 12;
+      case 128000:
+         return 13;
+      case 176400:
+         return 14;
+      case 192000:
+         return 15;
+      default:
+         return 0;
+   }
+}
+
 /* HDMI audio codec callbacks */
 static int vc4_hdmi_audio_hw_params(struct snd_pcm_substream *substream,
 				    struct snd_pcm_hw_params *params,
@@ -926,6 +965,11 @@ static int vc4_hdmi_audio_hw_params(struct snd_pcm_substream *substream,
 		 VC4_HD_MAI_CTL_ERRORF);
 
 	vc4_hdmi_audio_set_mai_clock(vc4_hdmi);
+
+	HDMI_WRITE(HDMI_MAI_FMT, 0 |
+		(0 /* 32-bit */ << 24) |
+		(2 /* PCM */ << 16) |
+		(sample_rate_to_mai_fmt(vc4_hdmi->audio.samplerate) << 8));
 
 	/* The B frame identifier should match the value used by alsa-lib (8) */
 	audio_packet_config =
