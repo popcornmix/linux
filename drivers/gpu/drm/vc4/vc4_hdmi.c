@@ -817,6 +817,8 @@ static void vc4_hdmi_set_n_cts(struct vc4_hdmi *vc4_hdmi)
 	cts = tmp;
 
 	HDMI_WRITE(HDMI_CRP_CFG,
+		   VC4_HDMI_CRP_CFG_USE_MAI_BUS_SYNC_FOR_CTS_GENERATION |
+		   VC4_HDMI_CRP_CFG_INC_N_COUNT_BY_4_ON_HBR_MODE |
 		   VC4_HDMI_CRP_CFG_EXTERNAL_CTS_EN |
 		   VC4_SET_FIELD(n, VC4_HDMI_CRP_CFG_N));
 
