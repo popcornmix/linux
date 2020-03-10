@@ -328,6 +328,17 @@ static void vc4_hdmi_set_spd_infoframe(struct drm_encoder *encoder)
 
 static void vc4_hdmi_set_audio_infoframe(struct drm_encoder *encoder)
 {
+	static const u8 cea_map[] = {
+		0xff, // 0
+		0xff, // 1
+		0x00, // 2.0
+		0x01, // 2.1
+		0x03, // 3.1
+		0x09, // 4.1
+		0x0b, // 5.1
+		0x12, // 7.0
+		0x13, // 7.1
+	};
 	struct vc4_hdmi *vc4_hdmi = encoder_to_vc4_hdmi(encoder);
 	union hdmi_infoframe frame;
 	int ret;
@@ -338,6 +349,10 @@ static void vc4_hdmi_set_audio_infoframe(struct drm_encoder *encoder)
 	frame.audio.sample_frequency = HDMI_AUDIO_SAMPLE_FREQUENCY_STREAM;
 	frame.audio.sample_size = HDMI_AUDIO_SAMPLE_SIZE_STREAM;
 	frame.audio.channels = vc4_hdmi->audio.channels;
+	if (frame.audio.channels < 2 || frame.audio.channels > 8)
+		DRM_ERROR("Unable to map channels: %d\n", frame.audio.channels);
+	else
+		frame.audio.channel_allocation = cea_map[frame.audio.channels];
 
 	vc4_hdmi_write_infoframe(encoder, &frame);
 }
