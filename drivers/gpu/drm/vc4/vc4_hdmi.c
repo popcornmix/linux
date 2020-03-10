@@ -807,7 +807,6 @@ static u32 vc4_hdmi_channel_map(struct vc4_hdmi *vc4_hdmi, u32 channel_mask)
 	if (channel_mask == 0xff)
 		return 0xb13f88;
 	for (i = 0; i < 8; i++) {
-	for (i = 0; i < 8; i++) {
 		if (channel_mask & BIT(i))
 			channel_map |= i << (3 * i);
 	}
