@@ -78,7 +78,7 @@
 # define VC4_HD_M_SW_RST			BIT(2)
 # define VC4_HD_M_ENABLE			BIT(0)
 
-#define CEC_CLOCK_FREQ 40000
+#define CEC_CLOCK_FREQ 27000
 
 static int vc4_hdmi_debugfs_regs(struct seq_file *m, void *unused)
 {
@@ -1350,9 +1350,9 @@ static irqreturn_t vc4_cec_irq_handler_thread(int irq, void *priv)
 	return IRQ_HANDLED;
 }
 
-static void vc4_cec_read_msg(struct vc4_dev *vc4, u32 cntrl1)
+static void vc4_cec_read_msg(struct vc4_hdmi *vc4_hdmi, u32 cntrl1)
 {
-	struct cec_msg *msg = &vc4->hdmi->cec_rx_msg;
+	struct cec_msg *msg = &vc4_hdmi->cec_rx_msg;
 	unsigned int i;
 
 	msg->len = 1 + ((cntrl1 & VC4_HDMI_CEC_REC_WRD_CNT_MASK) >>
@@ -1370,26 +1370,35 @@ static void vc4_cec_read_msg(struct vc4_dev *vc4, u32 cntrl1)
 static irqreturn_t vc4_cec_irq_handler(int irq, void *priv)
 {
 	struct vc4_hdmi *vc4_hdmi = priv;
-	u32 stat = HDMI_READ(HDMI_CPU_STATUS);
+	u32 stat = HDMI_READ(HDMI_CEC_CPU_STATUS);
 	u32 cntrl1, cntrl5;
 
-	if (!(stat & VC4_HDMI_CPU_CEC))
+	if (!(stat & vc4_hdmi->variant->cec_mask)) {
+		pr_err("Int not CEC - %08x (mask %08x)\n", stat, 
+				vc4_hdmi->variant->cec_mask);
 		return IRQ_NONE;
+	}
+	pr_err("Int is CEC - %08x (mask %08x)\n", stat, 
+				vc4_hdmi->variant->cec_mask);
+
 	vc4_hdmi->cec_rx_msg.len = 0;
 	cntrl1 = HDMI_READ(HDMI_CEC_CNTRL_1);
 	cntrl5 = HDMI_READ(HDMI_CEC_CNTRL_5);
 	vc4_hdmi->cec_irq_was_rx = cntrl5 & VC4_HDMI_CEC_RX_CEC_INT;
 	if (vc4_hdmi->cec_irq_was_rx) {
-		vc4_cec_read_msg(vc4, cntrl1);
+		pr_err("cec_irq_was_rx - %08x\n", vc4_hdmi->cec_irq_was_rx);
+		vc4_cec_read_msg(vc4_hdmi, cntrl1);
 		cntrl1 |= VC4_HDMI_CEC_CLEAR_RECEIVE_OFF;
 		HDMI_WRITE(HDMI_CEC_CNTRL_1, cntrl1);
 		cntrl1 &= ~VC4_HDMI_CEC_CLEAR_RECEIVE_OFF;
 	} else {
 		vc4_hdmi->cec_tx_ok = cntrl1 & VC4_HDMI_CEC_TX_STATUS_GOOD;
+		pr_err("cec_tx_ok - %08x\n", vc4_hdmi->cec_tx_ok);
 		cntrl1 &= ~VC4_HDMI_CEC_START_XMIT_BEGIN;
 	}
+
 	HDMI_WRITE(HDMI_CEC_CNTRL_1, cntrl1);
-	HDMI_WRITE(HDMI_CPU_CLEAR, VC4_HDMI_CPU_CEC);
+	HDMI_WRITE(HDMI_CEC_CPU_CLEAR, vc4_hdmi->variant->cec_mask);
 
 	return IRQ_WAKE_THREAD;
 }
@@ -1401,6 +1410,8 @@ static int vc4_hdmi_cec_adap_enable(struct cec_adapter *adap, bool enable)
 	const u32 usecs = 1000000 / CEC_CLOCK_FREQ;
 	u32 val = HDMI_READ(HDMI_CEC_CNTRL_5);
 
+	pr_err("%s: enable %u\n", __func__, enable);
+
 	val &= ~(VC4_HDMI_CEC_TX_SW_RESET | VC4_HDMI_CEC_RX_SW_RESET |
 		 VC4_HDMI_CEC_CNT_TO_4700_US_MASK |
 		 VC4_HDMI_CEC_CNT_TO_4500_US_MASK);
@@ -1411,26 +1422,30 @@ static int vc4_hdmi_cec_adap_enable(struct cec_adapter *adap, bool enable)
 		HDMI_WRITE(HDMI_CEC_CNTRL_5, val |
 			   VC4_HDMI_CEC_TX_SW_RESET | VC4_HDMI_CEC_RX_SW_RESET);
 		HDMI_WRITE(HDMI_CEC_CNTRL_5, val);
+		pr_err("CNTRL5 written as %08x\n", HDMI_READ(HDMI_CEC_CNTRL_5));
 		HDMI_WRITE(HDMI_CEC_CNTRL_2,
 			 ((1500 / usecs) << VC4_HDMI_CEC_CNT_TO_1500_US_SHIFT) |
 			 ((1300 / usecs) << VC4_HDMI_CEC_CNT_TO_1300_US_SHIFT) |
 			 ((800 / usecs) << VC4_HDMI_CEC_CNT_TO_800_US_SHIFT) |
 			 ((600 / usecs) << VC4_HDMI_CEC_CNT_TO_600_US_SHIFT) |
 			 ((400 / usecs) << VC4_HDMI_CEC_CNT_TO_400_US_SHIFT));
+		pr_err("CNTRL2 written as %08x\n", HDMI_READ(HDMI_CEC_CNTRL_2));
 		HDMI_WRITE(HDMI_CEC_CNTRL_3,
 			 ((2750 / usecs) << VC4_HDMI_CEC_CNT_TO_2750_US_SHIFT) |
 			 ((2400 / usecs) << VC4_HDMI_CEC_CNT_TO_2400_US_SHIFT) |
 			 ((2050 / usecs) << VC4_HDMI_CEC_CNT_TO_2050_US_SHIFT) |
 			 ((1700 / usecs) << VC4_HDMI_CEC_CNT_TO_1700_US_SHIFT));
+		pr_err("CNTRL3 written as %08x\n", HDMI_READ(HDMI_CEC_CNTRL_3));
 		HDMI_WRITE(HDMI_CEC_CNTRL_4,
 			 ((4300 / usecs) << VC4_HDMI_CEC_CNT_TO_4300_US_SHIFT) |
 			 ((3900 / usecs) << VC4_HDMI_CEC_CNT_TO_3900_US_SHIFT) |
 			 ((3600 / usecs) << VC4_HDMI_CEC_CNT_TO_3600_US_SHIFT) |
 			 ((3500 / usecs) << VC4_HDMI_CEC_CNT_TO_3500_US_SHIFT));
+		pr_err("CNTRL4 written as %08x\n", HDMI_READ(HDMI_CEC_CNTRL_4));
 
-		HDMI_WRITE(HDMI_CPU_MASK_CLEAR, VC4_HDMI_CPU_CEC);
+		HDMI_WRITE(HDMI_CEC_CPU_MASK_CLEAR, vc4_hdmi->variant->cec_mask);
 	} else {
-		HDMI_WRITE(HDMI_CPU_MASK_SET, VC4_HDMI_CPU_CEC);
+		HDMI_WRITE(HDMI_CEC_CPU_MASK_SET, vc4_hdmi->variant->cec_mask);
 		HDMI_WRITE(HDMI_CEC_CNTRL_5, val |
 			   VC4_HDMI_CEC_TX_SW_RESET | VC4_HDMI_CEC_RX_SW_RESET);
 	}
@@ -1441,6 +1456,7 @@ static int vc4_hdmi_cec_adap_log_addr(struct cec_adapter *adap, u8 log_addr)
 {
 	struct vc4_hdmi *vc4_hdmi = cec_get_drvdata(adap);
 
+	pr_err("%s: log_addr %u\n", __func__, log_addr);
 	HDMI_WRITE(HDMI_CEC_CNTRL_1,
 		   (HDMI_READ(HDMI_CEC_CNTRL_1) & ~VC4_HDMI_CEC_ADDR_MASK) |
 		   (log_addr & 0xf) << VC4_HDMI_CEC_ADDR_SHIFT);
@@ -1454,6 +1470,7 @@ static int vc4_hdmi_cec_adap_transmit(struct cec_adapter *adap, u8 attempts,
 	u32 val;
 	unsigned int i;
 
+	pr_err("%s: attempts %u\n", __func__, attempts);
 	for (i = 0; i < msg->len; i += 4)
 		HDMI_WRITE(HDMI_CEC_TX_DATA_1 + i,
 			   (msg->msg[i]) |
@@ -1480,23 +1497,25 @@ static const struct cec_adap_ops vc4_hdmi_cec_adap_ops = {
 
 static int vc4_hdmi_cec_init(struct vc4_hdmi *vc4_hdmi)
 {
+	struct cec_connector_info conn_info;
+	u32 value;
 	int ret;
 
 	if (!vc4_hdmi->variant->cec_available)
 		return 0;
 
 	vc4_hdmi->cec_adap = cec_allocate_adapter(&vc4_hdmi_cec_adap_ops,
-					      vc4, "vc4",
+					      vc4_hdmi, "vc4",
 					      CEC_CAP_DEFAULTS |
 					      CEC_CAP_CONNECTOR_INFO, 1);
 	ret = PTR_ERR_OR_ZERO(vc4_hdmi->cec_adap);
 	if (ret < 0)
 		return ret;
 
-	cec_fill_conn_info_from_drm(&conn_info, hdmi->connector);
-	cec_s_conn_info(hdmi->cec_adap, &conn_info);
+	cec_fill_conn_info_from_drm(&conn_info, &vc4_hdmi->connector);
+	cec_s_conn_info(vc4_hdmi->cec_adap, &conn_info);
 
-	HDMI_WRITE(HDMI_CPU_MASK_SET, 0xffffffff);
+	HDMI_WRITE(HDMI_CEC_CPU_MASK_SET, 0xffffffff);
 	value = HDMI_READ(HDMI_CEC_CNTRL_1);
 	value &= ~VC4_HDMI_CEC_DIV_CLK_CNT_MASK;
 	/*
@@ -1507,14 +1526,16 @@ static int vc4_hdmi_cec_init(struct vc4_hdmi *vc4_hdmi)
 	value |= VC4_HDMI_CEC_ADDR_MASK |
 		 (4091 << VC4_HDMI_CEC_DIV_CLK_CNT_SHIFT);
 	HDMI_WRITE(HDMI_CEC_CNTRL_1, value);
-	ret = devm_request_threaded_irq(dev, platform_get_irq(pdev, 0),
+	ret = devm_request_threaded_irq(&vc4_hdmi->pdev->dev,
+					platform_get_irq(vc4_hdmi->pdev, 0),
 					vc4_cec_irq_handler,
-					vc4_cec_irq_handler_thread, 0,
+					vc4_cec_irq_handler_thread,
+					IRQF_SHARED,
 					"vc4 hdmi cec", vc4_hdmi);
 	if (ret)
 		goto err_delete_cec_adap;
 
-	ret = cec_register_adapter(vc4_hdmi->cec_adap, vc4_hdmi);
+	ret = cec_register_adapter(vc4_hdmi->cec_adap, &vc4_hdmi->pdev->dev);
 	if (ret < 0)
 		goto err_delete_cec_adap;
 
@@ -1660,6 +1681,14 @@ static int vc5_hdmi_init_resources(struct vc4_hdmi *vc4_hdmi)
 	if (IS_ERR(vc4_hdmi->dvp_regs))
 		return PTR_ERR(vc4_hdmi->dvp_regs);
 
+	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "intr2");
+	if (!res)
+		return -ENODEV;
+
+	vc4_hdmi->intr2_regs = devm_ioremap(dev, res->start, resource_size(res));
+	if (IS_ERR(vc4_hdmi->intr2_regs))
+		return PTR_ERR(vc4_hdmi->intr2_regs);
+
 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM, "phy");
 	if (!res)
 		return -ENODEV;
@@ -1701,9 +1730,6 @@ static int vc5_hdmi_init_resources(struct vc4_hdmi *vc4_hdmi)
 
 static int vc4_hdmi_bind(struct device *dev, struct device *master, void *data)
 {
-#ifdef CONFIG_DRM_VC4_HDMI_CEC
-	struct cec_connector_info conn_info;
-#endif
 	struct platform_device *pdev = to_platform_device(dev);
 	struct drm_device *drm = dev_get_drvdata(master);
 	const struct vc4_hdmi_variant *variant;
@@ -1858,11 +1884,14 @@ static const struct vc4_hdmi_variant bcm2835_variant = {
 	.phy_rng_disable	= vc4_hdmi_phy_rng_disable,
 	.get_hsm_clock		= vc4_hdmi_get_hsm_clock,
 	.channel_map		= vc4_hdmi_channel_map,
+
+	.cec_mask = VC4_HDMI_CPU_CEC,
 };
 
 static const struct vc4_hdmi_variant bcm2711_hdmi0_variant = {
 	.id			= 0,
 	.audio_available	= true,
+	.cec_available		= true,
 	.max_pixel_clock	= 148500000,
 	.registers		= vc5_hdmi_hdmi0_fields,
 	.num_registers		= ARRAY_SIZE(vc5_hdmi_hdmi0_fields),
@@ -1882,6 +1911,8 @@ static const struct vc4_hdmi_variant bcm2711_hdmi0_variant = {
 	.phy_rng_disable	= vc5_hdmi_phy_rng_disable,
 	.get_hsm_clock		= vc5_hdmi_get_hsm_clock,
 	.channel_map		= vc5_hdmi_channel_map,
+
+	.cec_mask = VC5_HDMI0_CPU_CEC_RX | VC5_HDMI0_CPU_CEC_TX | VC5_HDMI0_CPU_HOTPLUG_CONN | VC5_HDMI0_CPU_HOTPLUG_REM,
 };
 
 static const struct vc4_hdmi_variant bcm2711_hdmi1_variant = {
@@ -1906,6 +1937,8 @@ static const struct vc4_hdmi_variant bcm2711_hdmi1_variant = {
 	.phy_rng_disable	= vc5_hdmi_phy_rng_disable,
 	.get_hsm_clock		= vc5_hdmi_get_hsm_clock,
 	.channel_map		= vc5_hdmi_channel_map,
+
+	.cec_mask = VC5_HDMI1_CPU_CEC_RX | VC5_HDMI1_CPU_CEC_TX,
 };
 
 static const struct of_device_id vc4_hdmi_dt_match[] = {

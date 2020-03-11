@@ -94,6 +94,9 @@ struct vc4_hdmi_variant {
 
 	/* Callback to get channel map */
 	u32 (*channel_map)(struct vc4_hdmi *vc4_hdmi, u32 channel_mask);
+
+	/* Bitmask for CEC events */
+	u32 cec_mask;
 };
 
 /* HDMI audio information */
@@ -137,6 +140,8 @@ struct vc4_hdmi {
 	void __iomem *ram_regs;
 	/* VC5 Only */
 	void __iomem *rm_regs;
+	/* VC5 Only */
+	void __iomem *intr2_regs;
 
 	int hpd_gpio;
 	bool hpd_active_low;

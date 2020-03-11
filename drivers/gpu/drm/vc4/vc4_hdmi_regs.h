@@ -24,6 +24,7 @@ enum vc4_hdmi_regs {
 	VC5_PHY,
 	VC5_RAM,
 	VC5_RM,
+	VC5_INTR2,
 };
 
 enum vc4_hdmi_field {
@@ -33,8 +34,12 @@ enum vc4_hdmi_field {
 	HDMI_CEC_CNTRL_3,
 	HDMI_CEC_CNTRL_4,
 	HDMI_CEC_CNTRL_5,
-	HDMI_CEC_CPU_MASK_STATUS,
 	HDMI_CEC_CPU_STATUS,
+	HDMI_CEC_CPU_SET,
+	HDMI_CEC_CPU_CLEAR,
+	HDMI_CEC_CPU_MASK_STATUS,
+	HDMI_CEC_CPU_MASK_SET,
+	HDMI_CEC_CPU_MASK_CLEAR,
 
 	/*
 	 * Transmit data, first byte is low byte of the 32-bit reg.
@@ -144,6 +149,7 @@ struct vc4_hdmi_register {
 #define VC5_CEC_REG(reg, offset)	_VC4_REG(VC5_CEC, reg, offset)
 #define VC5_CSC_REG(reg, offset)	_VC4_REG(VC5_CSC, reg, offset)
 #define VC5_DVP_REG(reg, offset)	_VC4_REG(VC5_DVP, reg, offset)
+#define VC5_INTR2_REG(reg, offset)	_VC4_REG(VC5_INTR2, reg, offset)
 #define VC5_PHY_REG(reg, offset)	_VC4_REG(VC5_PHY, reg, offset)
 #define VC5_RAM_REG(reg, offset)	_VC4_REG(VC5_RAM, reg, offset)
 #define VC5_RM_REG(reg, offset)		_VC4_REG(VC5_RM, reg, offset)
@@ -202,7 +208,11 @@ static const struct vc4_hdmi_register vc4_hdmi_fields[] = {
 	VC4_HDMI_REG(HDMI_TX_PHY_RESET_CTL, 0x02c0),
 	VC4_HDMI_REG(HDMI_TX_PHY_CTL_0, 0x02c4),
 	VC4_HDMI_REG(HDMI_CEC_CPU_STATUS, 0x0340),
+	VC4_HDMI_REG(HDMI_CEC_CPU_SET, 0x0344),
+	VC4_HDMI_REG(HDMI_CEC_CPU_CLEAR, 0x0348),
 	VC4_HDMI_REG(HDMI_CEC_CPU_MASK_STATUS, 0x034c),
+	VC4_HDMI_REG(HDMI_CEC_CPU_MASK_SET, 0x0350),
+	VC4_HDMI_REG(HDMI_CEC_CPU_MASK_CLEAR, 0x0354),
 	VC4_HDMI_REG(HDMI_RAM_PACKET_START, 0x0400),
 };
 
@@ -272,6 +282,12 @@ static const struct vc4_hdmi_register vc5_hdmi_hdmi0_fields[] = {
 	VC5_CEC_REG(HDMI_CEC_RX_DATA_2, 0x03c),
 	VC5_CEC_REG(HDMI_CEC_RX_DATA_3, 0x040),
 	VC5_CEC_REG(HDMI_CEC_RX_DATA_4, 0x044),
+	VC5_INTR2_REG(HDMI_CEC_CPU_STATUS, 0x0000),
+	VC5_INTR2_REG(HDMI_CEC_CPU_SET, 0x0004),
+	VC5_INTR2_REG(HDMI_CEC_CPU_CLEAR, 0x0008),
+	VC5_INTR2_REG(HDMI_CEC_CPU_MASK_STATUS, 0x000c),
+	VC5_INTR2_REG(HDMI_CEC_CPU_MASK_SET, 0x0010),
+	VC5_INTR2_REG(HDMI_CEC_CPU_MASK_CLEAR, 0x0014),
 
 	VC5_CSC_REG(HDMI_CSC_CTL, 0x000),
 	VC5_CSC_REG(HDMI_CSC_12_11, 0x004),
@@ -348,6 +364,12 @@ static const struct vc4_hdmi_register vc5_hdmi_hdmi1_fields[] = {
 	VC5_CEC_REG(HDMI_CEC_RX_DATA_2, 0x03c),
 	VC5_CEC_REG(HDMI_CEC_RX_DATA_3, 0x040),
 	VC5_CEC_REG(HDMI_CEC_RX_DATA_4, 0x044),
+	VC5_INTR2_REG(HDMI_CEC_CPU_STATUS, 0x0000),
+	VC5_INTR2_REG(HDMI_CEC_CPU_SET, 0x0004),
+	VC5_INTR2_REG(HDMI_CEC_CPU_CLEAR, 0x0008),
+	VC5_INTR2_REG(HDMI_CEC_CPU_MASK_STATUS, 0x000c),
+	VC5_INTR2_REG(HDMI_CEC_CPU_MASK_SET, 0x0010),
+	VC5_INTR2_REG(HDMI_CEC_CPU_MASK_CLEAR, 0x0014),
 
 	VC5_CSC_REG(HDMI_CSC_CTL, 0x000),
 	VC5_CSC_REG(HDMI_CSC_12_11, 0x004),
@@ -378,6 +400,9 @@ void __iomem *__vc4_hdmi_get_field_base(struct vc4_hdmi *hdmi,
 	case VC5_DVP:
 		return hdmi->dvp_regs;
 
+	case VC5_INTR2:
+		return hdmi->intr2_regs;
+
 	case VC5_PHY:
 		return hdmi->phy_regs;
 
@@ -402,18 +427,20 @@ static inline u32 vc4_hdmi_read(struct vc4_hdmi *hdmi,
 	void __iomem *base;
 
 	if (reg > variant->num_registers) {
-		dev_warn(&hdmi->pdev->dev,
-			 "Invalid register ID %u\n", reg);
+		dev_err(&hdmi->pdev->dev,
+			 "%s: Invalid register ID %u\n", __func__, reg);
 		return 0;
 	}
 
 	field = &variant->registers[reg];
 	base = __vc4_hdmi_get_field_base(hdmi, field->reg);
 	if (!base) {
-		dev_warn(&hdmi->pdev->dev,
-			 "Unknown register ID %u\n", reg);
+		dev_err(&hdmi->pdev->dev,
+			 "%s: Unknown register ID %u - no base addr\n", __func__, reg);
 		return 0;
 	}
+	dev_err(&hdmi->pdev->dev, "%s: Reading addr reg %u, %px\n",
+			__func__, reg, base + field->offset);
 
 	return readl(base + field->offset);
 }
@@ -428,16 +455,21 @@ static inline void vc4_hdmi_write(struct vc4_hdmi *hdmi,
 	void __iomem *base;
 
 	if (reg > variant->num_registers) {
-		dev_warn(&hdmi->pdev->dev,
-			 "Invalid register ID %u\n", reg);
+		dev_err(&hdmi->pdev->dev,
+			 "%s: Invalid register ID %u\n", __func__, reg);
 		return;
 	}
 
 	field = &variant->registers[reg];
 	base = __vc4_hdmi_get_field_base(hdmi, field->reg);
-	if (!base)
+	if (!base) {
+		dev_err(&hdmi->pdev->dev,
+			 "%s: Unknown register ID %u - no base addr\n", __func__, reg);
 		return;
+	}
 
+	dev_err(&hdmi->pdev->dev, "%s: Writing addr reg %u, %px\n",
+			__func__, reg, base + field->offset);
 	writel(value, base + field->offset);
 }
 #define HDMI_WRITE(reg, val)	vc4_hdmi_write(vc4_hdmi, reg, val)
