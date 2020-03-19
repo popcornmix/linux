@@ -948,6 +948,7 @@ static int vc4_hdmi_audio_prepare(struct snd_pcm_substream *substream,
 	struct device *dev = &vc4_hdmi->pdev->dev;
 	u32 audio_packet_config, channel_mask;
 	u32 channel_map;
+	u32 mai_fmt;
 
 	if (substream != vc4_hdmi->audio.substream)
 		return -EINVAL;
@@ -956,7 +957,8 @@ static int vc4_hdmi_audio_prepare(struct snd_pcm_substream *substream,
 		__func__,
 		substream->runtime->rate,
 		snd_pcm_format_width(substream->runtime->format),
-		substream->runtime->channels);
+		substream->runtime->channels,
+		vc4_hdmi->audio.iec_status[0]);
 
 	vc4_hdmi->audio.channels = substream->runtime->channels;
 	vc4_hdmi->audio.samplerate = substream->runtime->rate;
@@ -970,10 +972,17 @@ static int vc4_hdmi_audio_prepare(struct snd_pcm_substream *substream,
 
 	vc4_hdmi_audio_set_mai_clock(vc4_hdmi);
 
-	HDMI_WRITE(HDMI_MAI_FMT, 0 |
-		(0 /* 32-bit */ << 24) |
-		(2 /* PCM */ << 16) |
-		(sample_rate_to_mai_fmt(vc4_hdmi->audio.samplerate) << 8));
+	if (vc4_hdmi->audio.iec_status[0] & IEC958_AES0_NONAUDIO &&
+		vc4_hdmi->audio.channels == 8)
+		mai_fmt = 200 << 16; /* HBR mode */
+	else
+		mai_fmt = 2 << 16; /* PCM mode */
+
+	mai_fmt |= sample_rate_to_mai_fmt(vc4_hdmi->audio.samplerate) << 8;
+
+	dev_dbg(dev, "%s: mai_fmt = 0x%08x\n", __func__, mai_fmt);
+
+	HDMI_WRITE(HDMI_MAI_FMT, mai_fmt);
 
 	/* The B frame identifier should match the value used by alsa-lib (8) */
 	audio_packet_config =
