@@ -149,7 +149,7 @@ struct bcm2835_desc {
 /* Transfer information bits - also bcm2835_cb.info field */
 #define BCM2835_DMA_INT_EN	BIT(0)
 #define BCM2835_DMA_TDMODE	BIT(1) /* 2D-Mode */
-#define BCM2835_DMA_WAIT_RESP	BIT(3) /* wait for AXI-write to be acked */
+#define BCM2835_DMA_WAIT_RESP	0 //BIT(3) /* wait for AXI-write to be acked */
 #define BCM2835_DMA_D_INC	BIT(4)
 #define BCM2835_DMA_D_WIDTH	BIT(5) /* 128bit writes if set */
 #define BCM2835_DMA_D_DREQ	BIT(6) /* enable DREQ for destination */
