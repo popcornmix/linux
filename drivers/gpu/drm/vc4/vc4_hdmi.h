@@ -111,6 +111,7 @@ struct vc4_hdmi_audio {
 	bool streaming;
 
 	unsigned char iec_status[4];
+	unsigned char chmap[8];
 };
 
 /* General HDMI hardware state. */

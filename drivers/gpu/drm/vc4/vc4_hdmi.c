@@ -48,6 +48,7 @@
 #include <sound/pcm_drm_eld.h>
 #include <sound/pcm_params.h>
 #include <sound/soc.h>
+#include <sound/tlv.h>
 #include "media/cec.h"
 #include "vc4_drv.h"
 #include "vc4_hdmi.h"
@@ -1136,6 +1137,102 @@ static int vc4_spdif_mask_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+/*
+ * ALSA API channel-map control callbacks
+ */
+static int vc4_chmap_ctl_info(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_info *uinfo)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct vc4_hdmi *vc4_hdmi = snd_component_to_hdmi(component);
+	struct drm_connector *connector = &vc4_hdmi->connector;
+
+	uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+	uinfo->count = ARRAY_SIZE(vc4_hdmi->audio.chmap);
+	uinfo->value.integer.min = 0;
+	uinfo->value.integer.max = SNDRV_CHMAP_LAST;
+
+		DRM_ERROR("%s: type:%d count:%d [%d,%d]\n", __func__, uinfo->type, uinfo->count, uinfo->value.integer.min, uinfo->value.integer.max);
+
+	return 0;
+}
+
+static int vc4_chmap_ctl_get(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct vc4_hdmi *vc4_hdmi = snd_component_to_hdmi(component);
+	unsigned char *chmap = vc4_hdmi->audio.chmap;
+	int i;
+
+	for (i = 0; i < ARRAY_SIZE(vc4_hdmi->audio.chmap); i++)
+		ucontrol->value.integer.value[i] = chmap[i];
+DRM_ERROR("%s: %d,%d,%d,%d,%d,%d,%d,%d\n", __func__, chmap[0], chmap[1], chmap[2], chmap[3], chmap[4], chmap[5], chmap[6], chmap[7]);
+
+	return 0;
+}
+
+static int vc4_chmap_ctl_put(struct snd_kcontrol *kcontrol,
+				struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct vc4_hdmi *vc4_hdmi = snd_component_to_hdmi(component);
+	unsigned char *chmap = vc4_hdmi->audio.chmap;
+	int i;
+	memset(vc4_hdmi->audio.chmap, 0, sizeof(vc4_hdmi->audio.chmap));
+	for (i = 0; i < ARRAY_SIZE(vc4_hdmi->audio.chmap); i++)
+		chmap[i] = ucontrol->value.integer.value[i];
+DRM_ERROR("%s: %d,%d,%d,%d,%d,%d,%d,%d\n", __func__, chmap[0], chmap[1], chmap[2], chmap[3], chmap[4], chmap[5], chmap[6], chmap[7]);
+	return 0;
+}
+
+static int vc4_chmap_ctl_tlv(struct snd_kcontrol *kcontrol, int op_flag,
+			     unsigned int size, unsigned int __user *tlv)
+{
+	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
+	struct vc4_hdmi *vc4_hdmi = snd_component_to_hdmi(component);
+	struct drm_connector *connector = &vc4_hdmi->connector;
+	unsigned char *chmap = vc4_hdmi->audio.chmap;
+
+	unsigned int __user *dst;
+	int c, count = 0;
+	int i;
+
+DRM_ERROR("%s: size:%d op_flag:%x\n", __func__, size, op_flag);
+	if (size < 8)
+		return -ENOMEM;
+	if (put_user(SNDRV_CTL_TLVT_CONTAINER, tlv))
+		return -EFAULT;
+	size -= 8;
+	dst = tlv + 2;
+	for (i = 0; i < 1; i++) {
+		int channels = 8;
+		int chs_bytes = channels * 4;
+		if (size < 8)
+			return -ENOMEM;
+		if (put_user(SNDRV_CTL_TLVT_CHMAP_FIXED, dst) ||
+		    put_user(chs_bytes, dst + 1))
+			return -EFAULT;
+		dst += 2;
+		size -= 8;
+		count += 8;
+		if (size < chs_bytes)
+			return -ENOMEM;
+		size -= chs_bytes;
+		count += chs_bytes;
+		for (c = 0; c < channels; c++) {
+			if (put_user(chmap[c], dst))
+				return -EFAULT;
+			dst++;
+		}
+
+	}
+	if (put_user(count, tlv + 1))
+		return -EFAULT;
+DRM_ERROR("%s: %d,%d,%d,%d,%d,%d,%d,%d\n", __func__, chmap[0], chmap[1], chmap[2], chmap[3], chmap[4], chmap[5], chmap[6], chmap[7]);
+	return 0;
+}
+
 static const struct snd_kcontrol_new vc4_hdmi_audio_controls[] = {
 	{
 		.access = SNDRV_CTL_ELEM_ACCESS_READ |
@@ -1157,6 +1254,18 @@ static const struct snd_kcontrol_new vc4_hdmi_audio_controls[] = {
 		.name =    SNDRV_CTL_NAME_IEC958("", PLAYBACK, MASK),
 		.info =    vc4_spdif_info,
 		.get =     vc4_spdif_mask_get,
+	},
+	{
+		.access = //SNDRV_CTL_ELEM_ACCESS_READ |
+			//SNDRV_CTL_ELEM_ACCESS_WRITE |
+			SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+			SNDRV_CTL_ELEM_ACCESS_TLV_CALLBACK,
+		.iface = SNDRV_CTL_ELEM_IFACE_PCM,
+		.name = "Playback Channel Map",
+		.info = vc4_chmap_ctl_info,
+		.get = vc4_chmap_ctl_get,
+		.put = vc4_chmap_ctl_put,
+		.tlv.c = vc4_chmap_ctl_tlv,
 	},
 };
 
@@ -1282,6 +1391,19 @@ static int vc4_hdmi_audio_init(struct vc4_hdmi *vc4_hdmi)
 	vc4_hdmi->audio.iec_status[1] =
 		IEC958_AES1_CON_ORIGINAL | IEC958_AES1_CON_PCM_CODER;
 	vc4_hdmi->audio.iec_status[3] = IEC958_AES3_CON_FS_48000;
+
+
+{
+	int i;
+	unsigned char *chmap = vc4_hdmi->audio.chmap;
+	const unsigned char m[] = { SNDRV_CHMAP_RL, SNDRV_CHMAP_RR, SNDRV_CHMAP_FL, SNDRV_CHMAP_FR,
+				   SNDRV_CHMAP_FC, SNDRV_CHMAP_LFE,
+				   SNDRV_CHMAP_SL, SNDRV_CHMAP_SR };
+	for (i=0; i<ARRAY_SIZE(vc4_hdmi->audio.chmap); i++)
+		chmap[i] = m[i];
+DRM_ERROR("%s: %d,%d,%d,%d,%d,%d,%d,%d\n", __func__, chmap[0], chmap[1], chmap[2], chmap[3], chmap[4], chmap[5], chmap[6], chmap[7]);
+}
+
 
 	ret = devm_snd_dmaengine_pcm_register(dev, &pcm_conf, 0);
 	if (ret) {
