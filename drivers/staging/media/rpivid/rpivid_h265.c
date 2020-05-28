@@ -572,8 +572,8 @@ static inline __u32 dma_to_axi_addr(dma_addr_t a)
 static void write_bitstream(struct rpivid_dec_env *const de,
 			    const struct rpivid_dec_state *const s)
 {
-	// Note that FFmpeg removes emulation prevention bytes, so this is
-	// matched in the configuration here.
+	// Note that FFmpeg V4L2 does not remove emulation prevention bytes,
+	// so this is matched in the configuration here.
 	// Whether that is the correct behaviour or not is not clear in the
 	// spec.
 	const int rpi_use_emu = 1;
@@ -1795,8 +1795,9 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 	/*
 	 * Need Aux ents for all (ref) DPB ents if temporal MV could
 	 * be enabled for any pic
-	 * ** At the moment we have aux ents for all pics whether or not
-	 *    they are ref
+	 * ** At the moment we create aux ents for all pics whether or not
+	 *    they are ref - they should then be discarded by the DPB-aux
+	 *    garbage collection code
 	 */
 	use_aux = ((s->sps.flags &
 		  V4L2_HEVC_SPS_FLAG_SPS_TEMPORAL_MVP_ENABLED) != 0);
