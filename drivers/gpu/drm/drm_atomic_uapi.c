@@ -754,6 +754,8 @@ static int drm_atomic_connector_set_property(struct drm_connector *connector,
 		state->hdcp_content_type = val;
 	} else if (property == connector->colorspace_property) {
 		state->colorspace = val;
+	} else if (property == connector->hdmi_color_format_property) {
+		state->hdmi_color_format = val;
 	} else if (property == config->writeback_fb_id_property) {
 		struct drm_framebuffer *fb;
 		int ret;
@@ -828,6 +830,8 @@ drm_atomic_connector_get_property(struct drm_connector *connector,
 		*val = state->picture_aspect_ratio;
 	} else if (property == config->content_type_property) {
 		*val = state->content_type;
+	} else if (property == connector->hdmi_color_format_property) {
+		*val = state->hdmi_color_format;
 	} else if (property == connector->colorspace_property) {
 		*val = state->colorspace;
 	} else if (property == connector->scaling_mode_property) {

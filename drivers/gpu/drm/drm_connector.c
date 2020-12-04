@@ -948,6 +948,13 @@ static const struct drm_prop_enum_list dp_colorspaces[] = {
 	{ DRM_MODE_COLORIMETRY_BT2020_YCC, "BT2020_YCC" },
 };
 
+static const struct drm_prop_enum_list hdmi_color_formats[] = {
+	{ DRM_COLOR_FORMAT_RGB444, "RGB444" },
+	{ DRM_COLOR_FORMAT_YCRCB444, "YCrCb444" },
+	{ DRM_COLOR_FORMAT_YCRCB422, "YCrCb422" },
+	{ DRM_COLOR_FORMAT_YCRCB420, "YCrCb420" },
+};
+
 /**
  * DOC: standard connector properties
  *
@@ -2211,6 +2218,40 @@ bool drm_connector_atomic_hdr_metadata_equal(struct drm_connector_state *old_sta
 	return !memcmp(old_blob->data, new_blob->data, old_blob->length);
 }
 EXPORT_SYMBOL(drm_connector_atomic_hdr_metadata_equal);
+
+/**
+ * drm_mode_create_hdmi_color_formats_property - create hdmi color formats property
+ * @connector: connector to create the output property on.
+ *
+ * Called by a driver the first time it's needed, must be attached to desired
+ * HDMI connectors.
+ *
+ * Returns:
+ * Zero on success, negative errno on failure.
+ */
+int drm_mode_create_hdmi_color_formats_property(struct drm_connector *connector)
+{
+	struct drm_device *dev = connector->dev;
+	struct drm_property *prop;
+
+	prop = connector->hdmi_color_format_property;
+	if (!prop) {
+		prop = drm_property_create_enum(dev, DRM_MODE_PROP_ENUM,
+						"hdmi color formats",
+						hdmi_color_formats,
+						ARRAY_SIZE(hdmi_color_formats));
+		if (!prop)
+			return -ENOMEM;
+
+		connector->hdmi_color_format_property = prop;
+	}
+
+	drm_object_attach_property(&connector->base, prop, DRM_COLOR_FORMAT_RGB444);
+	connector->state->hdmi_color_format = DRM_COLOR_FORMAT_RGB444;
+
+	return 0;
+}
+EXPORT_SYMBOL(drm_mode_create_hdmi_color_formats_property);
 
 /**
  * drm_connector_set_vrr_capable_property - sets the variable refresh rate

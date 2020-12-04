@@ -709,6 +709,8 @@ struct drm_connector_state {
 	 */
 	u32 colorspace;
 
+	enum drm_color_formats hdmi_color_format;
+
 	/**
 	 * @writeback_job: Writeback job for writeback connectors
 	 *
@@ -1319,6 +1321,8 @@ struct drm_connector {
 	 */
 	struct drm_property *colorspace_property;
 
+	struct drm_property *hdmi_color_format_property;
+
 	/**
 	 * @path_blob_ptr:
 	 *
@@ -1629,6 +1633,7 @@ int drm_connector_attach_hdr_output_metadata_property(struct drm_connector *conn
 bool drm_connector_atomic_hdr_metadata_equal(struct drm_connector_state *old_state,
 					     struct drm_connector_state *new_state);
 int drm_mode_create_aspect_ratio_property(struct drm_device *dev);
+int drm_mode_create_hdmi_color_formats_property(struct drm_connector *connector);
 int drm_mode_create_hdmi_colorspace_property(struct drm_connector *connector);
 int drm_mode_create_dp_colorspace_property(struct drm_connector *connector);
 int drm_mode_create_content_type_property(struct drm_device *dev);
