@@ -3717,7 +3717,7 @@ static int do_y420vdb_modes(struct drm_connector *connector,
 	}
 
 	if (modes > 0)
-		info->color_formats |= DRM_COLOR_FORMAT_YCRCB420;
+		info->color_formats |= BIT(DRM_COLOR_FORMAT_YCRCB420);
 	return modes;
 }
 
@@ -4228,7 +4228,7 @@ static void drm_parse_y420cmdb_bitmap(struct drm_connector *connector,
 	if (map_len == 0) {
 		/* All CEA modes support ycbcr420 sampling also.*/
 		hdmi->y420_cmdb_map = U64_MAX;
-		info->color_formats |= DRM_COLOR_FORMAT_YCRCB420;
+		info->color_formats |= BIT(DRM_COLOR_FORMAT_YCRCB420);
 		return;
 	}
 
@@ -4251,7 +4251,7 @@ static void drm_parse_y420cmdb_bitmap(struct drm_connector *connector,
 		map |= (u64)db[2 + count] << (8 * count);
 
 	if (map)
-		info->color_formats |= DRM_COLOR_FORMAT_YCRCB420;
+		info->color_formats |= BIT(DRM_COLOR_FORMAT_YCRCB420);
 
 	hdmi->y420_cmdb_map = map;
 }
@@ -4955,11 +4955,11 @@ static void drm_parse_hdmi_deep_color_info(struct drm_connector *connector,
 	 * modes and forbids YCRCB422 support for all video modes per
 	 * HDMI 1.3 spec.
 	 */
-	info->color_formats = DRM_COLOR_FORMAT_RGB444;
+	info->color_formats = BIT(DRM_COLOR_FORMAT_RGB444);
 
 	/* YCRCB444 is optional according to spec. */
 	if (hdmi[6] & DRM_EDID_HDMI_DC_Y444) {
-		info->color_formats |= DRM_COLOR_FORMAT_YCRCB444;
+		info->color_formats |= BIT(DRM_COLOR_FORMAT_YCRCB444);
 		DRM_DEBUG("%s: HDMI sink does YCRCB444 in deep color.\n",
 			  connector->name);
 	}
@@ -5009,11 +5009,11 @@ static void drm_parse_cea_ext(struct drm_connector *connector,
 	info->cea_rev = edid_ext[1];
 
 	/* The existence of a CEA block should imply RGB support */
-	info->color_formats = DRM_COLOR_FORMAT_RGB444;
+	info->color_formats = BIT(DRM_COLOR_FORMAT_RGB444);
 	if (edid_ext[3] & EDID_CEA_YCRCB444)
-		info->color_formats |= DRM_COLOR_FORMAT_YCRCB444;
+		info->color_formats |= BIT(DRM_COLOR_FORMAT_YCRCB444);
 	if (edid_ext[3] & EDID_CEA_YCRCB422)
-		info->color_formats |= DRM_COLOR_FORMAT_YCRCB422;
+		info->color_formats |= BIT(DRM_COLOR_FORMAT_YCRCB422);
 
 	if (cea_db_offsets(edid_ext, &start, &end))
 		return;
@@ -5171,11 +5171,11 @@ u32 drm_add_display_info(struct drm_connector *connector, const struct edid *edi
 	DRM_DEBUG("%s: Assigning EDID-1.4 digital sink color depth as %d bpc.\n",
 			  connector->name, info->bpc);
 
-	info->color_formats |= DRM_COLOR_FORMAT_RGB444;
+	info->color_formats |= BIT(DRM_COLOR_FORMAT_RGB444);
 	if (edid->features & DRM_EDID_FEATURE_RGB_YCRCB444)
-		info->color_formats |= DRM_COLOR_FORMAT_YCRCB444;
+		info->color_formats |= BIT(DRM_COLOR_FORMAT_YCRCB444);
 	if (edid->features & DRM_EDID_FEATURE_RGB_YCRCB422)
-		info->color_formats |= DRM_COLOR_FORMAT_YCRCB422;
+		info->color_formats |= BIT(DRM_COLOR_FORMAT_YCRCB422);
 	return quirks;
 }
 
@@ -5464,7 +5464,7 @@ static bool is_hdmi2_sink(const struct drm_connector *connector)
 		return true;
 
 	return connector->display_info.hdmi.scdc.supported ||
-		connector->display_info.color_formats & DRM_COLOR_FORMAT_YCRCB420;
+		connector->display_info.color_formats & BIT(DRM_COLOR_FORMAT_YCRCB420);
 }
 
 static inline bool is_eotf_supported(u8 output_eotf, u8 sink_eotf)

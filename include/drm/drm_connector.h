@@ -414,6 +414,13 @@ enum drm_bus_flags {
 	DRM_BUS_FLAG_SHARP_SIGNALS = BIT(8),
 };
 
+enum drm_color_formats {
+	DRM_COLOR_FORMAT_RGB444 = 0,
+	DRM_COLOR_FORMAT_YCRCB444,
+	DRM_COLOR_FORMAT_YCRCB422,
+	DRM_COLOR_FORMAT_YCRCB420,
+};
+
 /**
  * struct drm_display_info - runtime data about the connected sink
  *
@@ -446,11 +453,6 @@ struct drm_display_info {
 	 */
 	enum subpixel_order subpixel_order;
 
-#define DRM_COLOR_FORMAT_RGB444		(1<<0)
-#define DRM_COLOR_FORMAT_YCRCB444	(1<<1)
-#define DRM_COLOR_FORMAT_YCRCB422	(1<<2)
-#define DRM_COLOR_FORMAT_YCRCB420	(1<<3)
-
 	/**
 	 * @panel_orientation: Read only connector property for built-in panels,
 	 * indicating the orientation of the panel vs the device's casing.
@@ -461,10 +463,10 @@ struct drm_display_info {
 	int panel_orientation;
 
 	/**
-	 * @color_formats: HDMI Color formats, selects between RGB and YCrCb
-	 * modes. Used DRM_COLOR_FORMAT\_ defines, which are _not_ the same ones
-	 * as used to describe the pixel format in framebuffers, and also don't
-	 * match the formats in @bus_formats which are shared with v4l.
+	 * @color_formats: Bitfield of HDMI Color formats, selects between RGB
+	 * and YCrCb modes. Used @drm_color_formats, which are _not_ the same
+	 * ones as used to describe the pixel format in framebuffers, and also
+	 * don't match the formats in @bus_formats which are shared with v4l.
 	 */
 	u32 color_formats;
 
