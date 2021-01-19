@@ -726,8 +726,8 @@ drm_fourcc_canonicalize_nvidia_format_mod(__u64 modifier)
 
 /*
  * Some Broadcom modifiers take parameters, for example the number of
- * vertical lines in the image. Reserve the lower 32 bits for modifier
- * type, and the next 24 bits for parameters. Top 8 bits are the
+ * vertical lines in the image. Reserve the lower 8 bits for modifier
+ * type, and the next 48 bits for parameters. Top 8 bits are the
  * vendor code.
  */
 #define __fourcc_mod_broadcom_param_shift 8
