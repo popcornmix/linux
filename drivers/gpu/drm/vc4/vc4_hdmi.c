@@ -1546,6 +1546,23 @@ static int sample_rate_to_mai_fmt(int samplerate)
 	}
 }
 
+#define TIMEOUT 100    //milliseconds
+static void dlate_callback(struct timer_list *t)
+{
+	struct vc4_hdmi *vc4_hdmi = from_timer(vc4_hdmi, t, dlate_timer);
+	uint32_t ctl = HDMI_READ(HDMI_MAI_CTL);
+	if (ctl & (VC4_HD_MAI_CTL_DLATE | VC4_HD_MAI_CTL_ERRORE | VC4_HD_MAI_CTL_ERRORF)) {
+		printk(KERN_INFO "HDMI audio fifo error: %s%s%s(%x)\n",
+		(ctl & VC4_HD_MAI_CTL_DLATE) ? "dlate ":"",
+		(ctl & VC4_HD_MAI_CTL_ERRORE) ? "errore ":"",
+		(ctl & VC4_HD_MAI_CTL_ERRORF) ? "errorf ":"",
+		ctl);
+		// clear error bits
+		HDMI_WRITE(HDMI_MAI_CTL, ctl);
+	}
+	mod_timer(&vc4_hdmi->dlate_timer, jiffies + msecs_to_jiffies(TIMEOUT));
+}
+
 /* HDMI audio codec callbacks */
 static int vc4_hdmi_audio_prepare(struct snd_pcm_substream *substream,
 				  struct snd_soc_dai *dai)
@@ -1651,8 +1668,13 @@ static int vc4_hdmi_audio_trigger(struct snd_pcm_substream *substream, int cmd,
 					 VC4_HD_MAI_CTL_WHOLSMP |
 					 VC4_HD_MAI_CTL_CHALIGN |
 					 VC4_HD_MAI_CTL_ENABLE);
+		/* setup timer to call dlate_callback to check fifo errors */
+		timer_setup(&vc4_hdmi->dlate_timer, dlate_callback, 0);
+		mod_timer(&vc4_hdmi->dlate_timer, jiffies + msecs_to_jiffies(TIMEOUT));
 		break;
 	case SNDRV_PCM_TRIGGER_STOP:
+		del_timer(&vc4_hdmi->dlate_timer);
+
 		HDMI_WRITE(HDMI_MAI_CTL,
 			   VC4_HD_MAI_CTL_DLATE |
 			   VC4_HD_MAI_CTL_ERRORE |

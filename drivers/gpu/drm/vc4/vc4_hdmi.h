@@ -185,6 +185,8 @@ struct vc4_hdmi {
 	struct debugfs_regset32 phy_regset;
 	struct debugfs_regset32 ram_regset;
 	struct debugfs_regset32 rm_regset;
+
+	struct timer_list dlate_timer;
 };
 
 static inline struct vc4_hdmi *
