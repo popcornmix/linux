@@ -454,7 +454,7 @@
 
 		hvs@7e400000 {
 			compatible = "brcm,bcm2835-hvs";
-			reg = <0x7e400000 0x6000>;
+			reg = <0x7e400000 0x8000>;
 			interrupts = <2 1>;
 		};
 
