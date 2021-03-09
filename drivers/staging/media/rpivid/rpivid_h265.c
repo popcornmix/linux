@@ -1525,18 +1525,19 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 	struct rpivid_q_aux *dpb_q_aux[V4L2_HEVC_DPB_ENTRIES_NUM_MAX];
 	struct rpivid_dec_state *const s = ctx->state;
 	struct vb2_queue *vq;
-	struct rpivid_dec_env *de;
+	struct rpivid_dec_env *de = ctx->dec0;
 	unsigned int prev_rs;
 	unsigned int i;
 	int use_aux;
 	bool slice_temporal_mvp;
+
+	xtrace_in(dev, de);
 
 	pred_weight_table = &sh->pred_weight_table;
 
 	s->frame_end =
 		((run->src->flags & V4L2_BUF_FLAG_M2M_HOLD_CAPTURE_BUF) == 0);
 
-	de = ctx->dec0;
 	slice_temporal_mvp = (sh->flags &
 		   V4L2_HEVC_SLICE_PARAMS_FLAG_SLICE_TEMPORAL_MVP_ENABLED);
 
@@ -1786,8 +1787,10 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 	else
 		decode_slice(de, s);
 
-	if (!s->frame_end)
+	if (!s->frame_end) {
+		xtrace_ok(dev,de);
 		return;
+	}
 
 	// Frame end
 	memset(dpb_q_aux, 0,
@@ -1896,6 +1899,7 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 	}
 
 	de->state = RPIVID_DECODE_PHASE1;
+	xtrace_ok(dev, de);
 	return;
 
 fail:
@@ -1903,6 +1907,7 @@ fail:
 		// Actual error reporting happens in Trigger
 		de->state = s->frame_end ? RPIVID_DECODE_ERROR_DONE :
 					   RPIVID_DECODE_ERROR_CONTINUE;
+	xtrace_fail(dev, de);
 }
 
 //////////////////////////////////////////////////////////////////////////////
