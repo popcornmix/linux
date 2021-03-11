@@ -1605,9 +1605,9 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 		de->cmd_len = 0;
 		de->dpbno_col = ~0U;
 
-		de->bit_copy_gptr = ctx->bitbufs + 0;
+		de->bit_copy_gptr = ctx->bitbufs + ctx->p1idx;
 		de->bit_copy_len = 0;
-		de->cmd_copy_gptr = ctx->cmdbufs + 0;
+		de->cmd_copy_gptr = ctx->cmdbufs + ctx->p1idx;
 
 		de->frame_c_offset = ctx->dst_fmt.height * 128;
 		de->frame_stride = ctx->dst_fmt.plane_fmt[0].bytesperline * 128;
@@ -2329,6 +2329,8 @@ static void rpivid_h265_trigger(struct rpivid_ctx *ctx)
 		break;
 	case RPIVID_DECODE_PHASE1:
 		ctx->dec0 = NULL;
+		ctx->p1idx = (ctx->p1idx + 1 >= RPIVID_P1BUF_COUNT) ?
+							0 : ctx->p1idx + 1;
 		rpivid_hw_irq_active1_claim(dev, &de->irq_ent, phase1_claimed,
 					    de);
 		break;
