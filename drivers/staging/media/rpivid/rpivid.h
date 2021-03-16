@@ -24,9 +24,9 @@
 
 #define OPT_DEBUG_POLL_IRQ  0
 
-#define RPIVID_DEC_ENV_COUNT 3
-#define RPIVID_P1BUF_COUNT 2
-#define RPIVID_P2BUF_COUNT 2
+#define RPIVID_DEC_ENV_COUNT 6
+#define RPIVID_P1BUF_COUNT 3
+#define RPIVID_P2BUF_COUNT 3
 
 #define RPIVID_NAME			"rpivid"
 
@@ -110,12 +110,13 @@ struct rpivid_ctx {
 
 	struct rpivid_dec_env *dec_pool;
 
-	/* Some of these should be in dev */
 	unsigned int p1idx;
+	atomic_t p1out;
 	struct rpivid_gptr bitbufs[RPIVID_P1BUF_COUNT];
 	struct rpivid_gptr cmdbufs[RPIVID_P1BUF_COUNT];
+
+	/* *** Should be in dev *** */
 	unsigned int p2idx;
-	atomic_t p2out;
 	struct rpivid_gptr pu_bufs[RPIVID_P2BUF_COUNT];
 	struct rpivid_gptr coeff_bufs[RPIVID_P2BUF_COUNT];
 
@@ -143,6 +144,8 @@ struct rpivid_variant {
 };
 
 struct rpivid_hw_irq_ent;
+
+#define RPIVID_ICTL_ENABLE_UNLIMITED (-1)
 
 struct rpivid_hw_irq_ctrl {
 	/* Spinlock protecting claim and tail */
