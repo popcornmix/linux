@@ -20,7 +20,7 @@
 #include "rpivid_hw.h"
 
 #define DEBUG_TRACE_P1_CMD 0
-#define DEBUG_TRACE_EXECUTION 0
+#define DEBUG_TRACE_EXECUTION 1
 
 #if DEBUG_TRACE_EXECUTION
 #define xtrace_in(dev_, de_)\
@@ -192,8 +192,6 @@ struct rpivid_dec_env {
 	unsigned int decode_order;
 	int p1_status;		/* P1 status - what to realloc */
 
-	struct rpivid_dec_env *phase_wait_q_next;
-
 	struct rpi_cmd *cmd_fifo;
 	unsigned int cmd_len, cmd_max;
 	unsigned int num_slice_msgs;
@@ -218,6 +216,7 @@ struct rpivid_dec_env {
 	u32 rpi_framesize;
 	u32 rpi_currpoc;
 
+	bool p1local;
 	struct vb2_v4l2_buffer *frame_buf; // Detached dest buffer
 	unsigned int frame_c_offset;
 	unsigned int frame_stride;
@@ -1614,6 +1613,7 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 		de->frame_addr =
 			vb2_dma_contig_plane_dma_addr(&run->dst->vb2_buf, 0);
 		de->frame_aux = NULL;
+		de->p1local = false;
 
 		if (s->sps.bit_depth_luma_minus8 !=
 		    s->sps.bit_depth_chroma_minus8) {
@@ -1741,18 +1741,22 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 		}
 	}
 
-	// Pre calc a few things
-	s->src_addr =
-		!s->frame_end ?
-			0 :
-			vb2_dma_contig_plane_dma_addr(&run->src->vb2_buf, 0);
-	s->src_buf = s->src_addr != 0 ? NULL :
-					vb2_plane_vaddr(&run->src->vb2_buf, 0);
+	// Either map src buffer or use directly
+	s->src_addr = 0;
+	s->src_buf = NULL;
+	if (s->frame_end && !de->p1local)
+		s->src_addr = vb2_dma_contig_plane_dma_addr(&run->src->vb2_buf,
+							    0);
+	if (!s->src_addr) {
+		s->src_buf = vb2_plane_vaddr(&run->src->vb2_buf, 0);
+		de->p1local = true;
+	}
 	if (!s->src_addr && !s->src_buf) {
 		v4l2_err(&dev->v4l2_dev, "Failed to map src buffer\n");
 		goto fail;
 	}
 
+	// Pre calc a few things
 	s->sh = sh;
 	s->slice_qp = 26 + s->pps.init_qp_minus26 + s->sh->slice_qp_delta;
 	s->max_num_merge_cand = sh->slice_type == HEVC_SLICE_I ?
@@ -1950,6 +1954,9 @@ static void cb_phase2(struct rpivid_dev *const dev, void *v)
 
 	xtrace_in(dev, de);
 
+	/* Done with buffers - allow new P1 */
+	rpivid_hw_irq_active1_enable_claim(dev, 1);
+
 	v4l2_m2m_cap_buf_return(dev->m2m_dev, ctx->fh.m2m_ctx, de->frame_buf,
 				VB2_BUF_STATE_DONE);
 	de->frame_buf = NULL;
@@ -1959,11 +1966,11 @@ static void cb_phase2(struct rpivid_dev *const dev, void *v)
 	 */
 	dec_env_delete(de);
 
-	if (atomic_add_return(-1, &ctx->p2out) >= RPIVID_P2BUF_COUNT - 1) {
-		xtrace_fin(dev, de);
-		v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
-						 VB2_BUF_STATE_DONE);
-	}
+//	if (atomic_add_return(-1, &ctx->p2out) >= RPIVID_P2BUF_COUNT - 1) {
+//		xtrace_fin(dev, de);
+//		v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
+//						 VB2_BUF_STATE_DONE);
+//	}
 
 	xtrace_ok(dev, de);
 }
@@ -2074,6 +2081,7 @@ fail:
 			 __func__);
 		ctx->fatal_err = 1;
 	}
+	rpivid_hw_irq_active1_enable_claim(dev, 1);
 	dec_env_delete(de);
 	xtrace_fin(dev, de);
 	v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
@@ -2103,21 +2111,12 @@ static void cb_phase1(struct rpivid_dev *const dev, void *v)
 		return;
 	}
 
-	/* After the frame-buf is detached it must be returned but from
-	 * this point onward (phase2_claimed, cb_phase2) there are no error
-	 * paths so the return at the end of cb_phase2 is all that is needed
-	 */
-	de->frame_buf = v4l2_m2m_cap_buf_detach(dev->m2m_dev, ctx->fh.m2m_ctx);
-	if (!de->frame_buf) {
-		v4l2_err(&dev->v4l2_dev, "%s: No detached buffer\n", __func__);
-		goto fail;
-	}
-
 	ctx->p2idx =
 		(ctx->p2idx + 1 >= RPIVID_P2BUF_COUNT) ? 0 : ctx->p2idx + 1;
 
 	// Enable the next setup if our Q isn't too big
-	if (atomic_add_return(1, &ctx->p2out) < RPIVID_P2BUF_COUNT) {
+//	if (atomic_add_return(1, &ctx->p2out) < RPIVID_P2BUF_COUNT) {
+	if (atomic_add_return(-1, &ctx->p1out) >= RPIVID_P1BUF_COUNT - 1) {
 		xtrace_fin(dev, de);
 		v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
 						 VB2_BUF_STATE_DONE);
@@ -2129,10 +2128,13 @@ static void cb_phase1(struct rpivid_dev *const dev, void *v)
 	return;
 
 fail:
-	dec_env_delete(de);
+	rpivid_hw_irq_active1_enable_claim(dev, 1);
+#warning All errors paths broken WRT p1out
 	xtrace_fin(dev, de);
+	dec_env_delete(de);
 	v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
-					 VB2_BUF_STATE_ERROR);
+				     VB2_BUF_STATE_ERROR);
+
 	xtrace_fail(dev, de);
 }
 
@@ -2158,6 +2160,10 @@ static void phase1_claimed(struct rpivid_dev *const dev, void *v)
 	de->coeff_stride =
 		ALIGN_DOWN(coeff_gptr->size / de->pic_height_in_ctbs_y, 64);
 
+	/* phase1_claimed blocked until cb_phase1 completed so p2idx inc
+	 * in cb_phase2 after error detection
+	*/
+
 	apb_write_vc_addr(dev, RPI_PUWBASE, de->pu_base_vc);
 	apb_write_vc_len(dev, RPI_PUWSTRIDE, de->pu_stride);
 	apb_write_vc_addr(dev, RPI_COEFFWBASE, de->coeff_base_vc);
@@ -2176,6 +2182,7 @@ static void phase1_claimed(struct rpivid_dev *const dev, void *v)
 	return;
 
 fail:
+	rpivid_hw_irq_active1_enable_claim(dev, 1);
 	dec_env_delete(de);
 	xtrace_fin(dev, de);
 	v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
@@ -2331,6 +2338,26 @@ static void rpivid_h265_trigger(struct rpivid_ctx *ctx)
 		ctx->dec0 = NULL;
 		ctx->p1idx = (ctx->p1idx + 1 >= RPIVID_P1BUF_COUNT) ?
 							0 : ctx->p1idx + 1;
+
+		/* After the frame-buf is detached it must be returned but from
+		 * **** and that code is missing from all error paths
+		 */
+		de->frame_buf = v4l2_m2m_cap_buf_detach(dev->m2m_dev, ctx->fh.m2m_ctx);
+		if (!de->frame_buf) {
+			v4l2_err(&dev->v4l2_dev, "%s: No detached buffer\n", __func__);
+			//**************
+		}
+
+		// Enable the next setup if our Q isn't too big && we aren't
+		// using the src buffer (which we can't detach yet)
+		// * Really need to look into better Q handling
+		if (atomic_add_return(1, &ctx->p1out) < RPIVID_P1BUF_COUNT &&
+		    de->p1local) {
+			xtrace_fin(dev, de);
+			v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
+							 VB2_BUF_STATE_DONE);
+		}
+
 		rpivid_hw_irq_active1_claim(dev, &de->irq_ent, phase1_claimed,
 					    de);
 		break;
