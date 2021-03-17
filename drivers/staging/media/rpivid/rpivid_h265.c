@@ -568,8 +568,8 @@ static inline __u32 dma_to_axi_addr(dma_addr_t a)
 	return (__u32)(a >> 6);
 }
 
-static void write_bitstream(struct rpivid_dec_env *const de,
-			    const struct rpivid_dec_state *const s)
+static int write_bitstream(struct rpivid_dec_env *const de,
+			   const struct rpivid_dec_state *const s)
 {
 	// Note that FFmpeg V4L2 does not remove emulation prevention bytes,
 	// so this is matched in the configuration here.
@@ -583,6 +583,13 @@ static void write_bitstream(struct rpivid_dec_env *const de,
 	if (s->src_addr != 0) {
 		addr = s->src_addr + offset;
 	} else {
+		if (len + de->bit_copy_len > de->bit_copy_gptr->size) {
+			v4l2_warn(&de->ctx->dev->v4l2_dev,
+				  "Bit copy buffer overflow: size=%zu, offset=%zu, len=%u\n",
+				  de->bit_copy_gptr->size,
+				  de->bit_copy_len, len);
+			return -ENOMEM;
+		}
 		memcpy(de->bit_copy_gptr->ptr + de->bit_copy_len,
 		       s->src_buf + offset, len);
 		addr = de->bit_copy_gptr->addr + de->bit_copy_len;
@@ -594,6 +601,7 @@ static void write_bitstream(struct rpivid_dec_env *const de,
 	p1_apb_write(de, RPI_BFNUM, len);
 	p1_apb_write(de, RPI_BFCONTROL, offset + (1 << 7)); // Stop
 	p1_apb_write(de, RPI_BFCONTROL, offset + (rpi_use_emu << 6));
+	return 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1030,16 +1038,19 @@ static void wpp_end_previous_slice(struct rpivid_dec_env *const de,
 /* Only main profile supported so WPP => !Tiles which makes some of the
  * next chunk code simpler
  */
-static void wpp_decode_slice(struct rpivid_dec_env *const de,
-			     const struct rpivid_dec_state *const s)
+static int wpp_decode_slice(struct rpivid_dec_env *const de,
+			    const struct rpivid_dec_state *const s)
 {
 	bool reset_qp_y = true;
 	const bool indep = !s->dependent_slice_segment_flag;
+	int rv;
 
 	if (s->start_ts)
 		wpp_end_previous_slice(de, s);
 	pre_slice_decode(de, s);
-	write_bitstream(de, s);
+	rv = write_bitstream(de, s);
+	if (rv)
+		return rv;
 
 	if (!s->start_ts || indep || s->ctb_width == 1)
 		write_prob(de, s);
@@ -1064,7 +1075,7 @@ static void wpp_decode_slice(struct rpivid_dec_env *const de,
 			     1 | ((s->ctb_width - 1) << 5) |
 				((s->ctb_height - 1) << 18));
 	}
-
+	return 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1112,18 +1123,21 @@ static void end_previous_slice(struct rpivid_dec_env *const de,
 		     1 | (s->prev_ctb_x << 5) | (s->prev_ctb_y << 18));
 }
 
-static void decode_slice(struct rpivid_dec_env *const de,
-			 const struct rpivid_dec_state *const s)
+static int decode_slice(struct rpivid_dec_env *const de,
+			const struct rpivid_dec_state *const s)
 {
 	bool reset_qp_y;
 	unsigned int tile_x = ctb_to_tile_x(s, s->start_ctb_x);
 	unsigned int tile_y = ctb_to_tile_y(s, s->start_ctb_y);
+	int rv;
 
 	if (s->start_ts)
 		end_previous_slice(de, s);
 
 	pre_slice_decode(de, s);
-	write_bitstream(de, s);
+	rv = write_bitstream(de, s);
+	if (rv)
+		return rv;
 
 	reset_qp_y = !s->start_ts ||
 		!s->dependent_slice_segment_flag ||
@@ -1152,6 +1166,7 @@ static void decode_slice(struct rpivid_dec_env *const de,
 			     1 | ((s->ctb_width - 1) << 5) |
 				((s->ctb_height - 1) << 18));
 	}
+	return 0;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -1528,6 +1543,7 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 	unsigned int prev_rs;
 	unsigned int i;
 	int use_aux;
+	int rv;
 	bool slice_temporal_mvp;
 
 	xtrace_in(dev, de);
@@ -1787,9 +1803,11 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 	s->prev_ctb_y = prev_rs / de->pic_width_in_ctbs_y;
 
 	if ((s->pps.flags & V4L2_HEVC_PPS_FLAG_ENTROPY_CODING_SYNC_ENABLED))
-		wpp_decode_slice(de, s);
+		rv = wpp_decode_slice(de, s);
 	else
-		decode_slice(de, s);
+		rv = decode_slice(de, s);
+	if (rv)
+		goto fail;
 
 	if (!s->frame_end) {
 		xtrace_ok(dev,de);
