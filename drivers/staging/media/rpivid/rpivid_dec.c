@@ -25,6 +25,7 @@ void rpivid_device_run(void *priv)
 	struct rpivid_dev *dev = ctx->dev;
 	struct rpivid_run run = {};
 	struct media_request *src_req;
+	struct v4l2_ctrl *ctrl;
 
 	run.src = v4l2_m2m_next_src_buf(ctx->fh.m2m_ctx);
 	run.dst = v4l2_m2m_next_dst_buf(ctx->fh.m2m_ctx);
@@ -54,9 +55,11 @@ void rpivid_device_run(void *priv)
 		run.h265.pps =
 			rpivid_find_control_data(ctx,
 						 V4L2_CID_MPEG_VIDEO_HEVC_PPS);
-		run.h265.slice_params =
-			rpivid_find_control_data(ctx,
-						 V4L2_CID_MPEG_VIDEO_HEVC_SLICE_PARAMS);
+		ctrl = rpivid_find_ctrl(ctx,
+					V4L2_CID_MPEG_VIDEO_HEVC_SLICE_PARAMS);
+		run.h265.slice_params = ctrl->p_cur.p;
+		v4l2_info(&dev->v4l2_dev, "Ents=%d, size=%d\n", ctrl->elems, ctrl->elem_size);
+
 		run.h265.scaling_matrix =
 			rpivid_find_control_data(ctx,
 						 V4L2_CID_MPEG_VIDEO_HEVC_SCALING_MATRIX);

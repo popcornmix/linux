@@ -218,6 +218,7 @@ struct rpivid_dec_env {
 
 	bool p1local;
 	struct vb2_v4l2_buffer *frame_buf; // Detached dest buffer
+	struct vb2_v4l2_buffer *src_buf;   // Detached src buffer
 	unsigned int frame_c_offset;
 	unsigned int frame_stride;
 	dma_addr_t frame_addr;
@@ -237,6 +238,7 @@ struct rpivid_dec_env {
 	u16 slice_msgs[2 * HEVC_MAX_REFS * 8 + 3];
 	u8 scaling_factors[NUM_SCALING_FACTORS];
 
+	struct media_request_object req_obj;
 	struct rpivid_hw_irq_ent irq_ent;
 };
 
@@ -284,6 +286,16 @@ struct rpivid_dec_state {
 	unsigned int prev_ctb_x;        /* CTB X,Y of start_ts - 1 */
 	unsigned int prev_ctb_y;
 };
+
+static void dst_req_obj_release(struct media_request_object *object)
+{
+	// This is part of de - needs nothing doing to release
+}
+
+static const struct media_request_object_ops dst_req_obj_ops = {
+    .release = dst_req_obj_release,
+};
+
 
 static inline int clip_int(const int x, const int lo, const int hi)
 {
@@ -1535,7 +1547,7 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 	struct rpivid_dev *const dev = ctx->dev;
 	const struct v4l2_ctrl_hevc_slice_params *const sh =
 						run->h265.slice_params;
-	const struct v4l2_hevc_pred_weight_table *pred_weight_table;
+//	const struct v4l2_hevc_pred_weight_table *pred_weight_table;
 	struct rpivid_q_aux *dpb_q_aux[V4L2_HEVC_DPB_ENTRIES_NUM_MAX];
 	struct rpivid_dec_state *const s = ctx->state;
 	struct vb2_queue *vq;
@@ -1548,7 +1560,7 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 
 	xtrace_in(dev, de);
 
-	pred_weight_table = &sh->pred_weight_table;
+//	pred_weight_table = &sh->pred_weight_table;
 
 	s->frame_end =
 		((run->src->flags & V4L2_BUF_FLAG_M2M_HOLD_CAPTURE_BUF) == 0);
@@ -1968,29 +1980,19 @@ static int check_status(const struct rpivid_dev *const dev)
 static void cb_phase2(struct rpivid_dev *const dev, void *v)
 {
 	struct rpivid_dec_env *const de = v;
-	struct rpivid_ctx *const ctx = de->ctx;
 
 	xtrace_in(dev, de);
 
 	/* Done with buffers - allow new P1 */
 	rpivid_hw_irq_active1_enable_claim(dev, 1);
 
-	v4l2_m2m_cap_buf_return(dev->m2m_dev, ctx->fh.m2m_ctx, de->frame_buf,
-				VB2_BUF_STATE_DONE);
+	v4l2_m2m_buf_done(de->frame_buf, VB2_BUF_STATE_DONE);
 	de->frame_buf = NULL;
 
-	/* Delete de before finish as finish might immediately trigger a reuse
-	 * of de
-	 */
-	dec_env_delete(de);
-
-//	if (atomic_add_return(-1, &ctx->p2out) >= RPIVID_P2BUF_COUNT - 1) {
-//		xtrace_fin(dev, de);
-//		v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
-//						 VB2_BUF_STATE_DONE);
-//	}
+	media_request_object_complete(&de->req_obj);
 
 	xtrace_ok(dev, de);
+	dec_env_delete(de);
 }
 
 static void phase2_claimed(struct rpivid_dev *const dev, void *v)
@@ -2055,6 +2057,32 @@ static void phase2_claimed(struct rpivid_dev *const dev, void *v)
 
 static void phase1_claimed(struct rpivid_dev *const dev, void *v);
 
+// release any and all objects associated with de
+// and reenable phase 1 if required
+static void phase1_err_fin(struct rpivid_dev *const dev,
+			   struct rpivid_ctx *const ctx,
+			   struct rpivid_dec_env *const de)
+{
+	/* Return all detached buffers */
+	if (de->src_buf)
+		v4l2_m2m_buf_done(de->src_buf, VB2_BUF_STATE_ERROR);
+	de->src_buf = NULL;
+	if (de->frame_buf)
+		v4l2_m2m_buf_done(de->frame_buf, VB2_BUF_STATE_ERROR);
+	de->frame_buf = NULL;
+	if (de->req_obj.req)
+		media_request_object_complete(&de->req_obj);
+	media_request_object_init(&de->req_obj);
+	dec_env_delete(de);
+
+	/* Reenable phase 0 if we were blocking */
+	if (atomic_add_return(-1, &ctx->p1out) >= RPIVID_P1BUF_COUNT - 1)
+		v4l2_m2m_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx);
+
+	/* Done with P1-P2 buffers - allow new P1 */
+	rpivid_hw_irq_active1_enable_claim(dev, 1);
+}
+
 static void phase1_thread(struct rpivid_dev *const dev, void *v)
 {
 	struct rpivid_dec_env *const de = v;
@@ -2099,12 +2127,8 @@ fail:
 			 __func__);
 		ctx->fatal_err = 1;
 	}
-	rpivid_hw_irq_active1_enable_claim(dev, 1);
-	dec_env_delete(de);
-	xtrace_fin(dev, de);
-	v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
-					 VB2_BUF_STATE_ERROR);
 	xtrace_fail(dev, de);
+	phase1_err_fin(dev, ctx, de);
 }
 
 /* Always called in irq context (this is good) */
@@ -2129,15 +2153,17 @@ static void cb_phase1(struct rpivid_dev *const dev, void *v)
 		return;
 	}
 
+	v4l2_m2m_buf_done(de->src_buf, VB2_BUF_STATE_DONE);
+	de->src_buf = NULL;
+
+	/* All phase1 error paths done - it is safe to inc p2idx */
 	ctx->p2idx =
 		(ctx->p2idx + 1 >= RPIVID_P2BUF_COUNT) ? 0 : ctx->p2idx + 1;
 
-	// Enable the next setup if our Q isn't too big
-//	if (atomic_add_return(1, &ctx->p2out) < RPIVID_P2BUF_COUNT) {
+	/* Renable the next setup if we were blocking */
 	if (atomic_add_return(-1, &ctx->p1out) >= RPIVID_P1BUF_COUNT - 1) {
 		xtrace_fin(dev, de);
-		v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
-						 VB2_BUF_STATE_DONE);
+		v4l2_m2m_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx);
 	}
 
 	rpivid_hw_irq_active2_claim(dev, &de->irq_ent, phase2_claimed, de);
@@ -2146,13 +2172,7 @@ static void cb_phase1(struct rpivid_dev *const dev, void *v)
 	return;
 
 fail:
-	rpivid_hw_irq_active1_enable_claim(dev, 1);
-#warning All errors paths broken WRT p1out
-	xtrace_fin(dev, de);
-	dec_env_delete(de);
-	v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
-				     VB2_BUF_STATE_ERROR);
-
+	phase1_err_fin(dev, ctx, de);
 	xtrace_fail(dev, de);
 }
 
@@ -2179,7 +2199,7 @@ static void phase1_claimed(struct rpivid_dev *const dev, void *v)
 		ALIGN_DOWN(coeff_gptr->size / de->pic_height_in_ctbs_y, 64);
 
 	/* phase1_claimed blocked until cb_phase1 completed so p2idx inc
-	 * in cb_phase2 after error detection
+	 * in cb_phase1 after error detection
 	*/
 
 	apb_write_vc_addr(dev, RPI_PUWBASE, de->pu_base_vc);
@@ -2200,12 +2220,8 @@ static void phase1_claimed(struct rpivid_dev *const dev, void *v)
 	return;
 
 fail:
-	rpivid_hw_irq_active1_enable_claim(dev, 1);
-	dec_env_delete(de);
-	xtrace_fin(dev, de);
-	v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
-					 VB2_BUF_STATE_ERROR);
 	xtrace_fail(dev, de);
+	phase1_err_fin(dev, ctx, de);
 }
 
 static void dec_state_delete(struct rpivid_ctx *const ctx)
@@ -2360,22 +2376,36 @@ static void rpivid_h265_trigger(struct rpivid_ctx *ctx)
 		/* After the frame-buf is detached it must be returned but from
 		 * **** and that code is missing from all error paths
 		 */
-		de->frame_buf = v4l2_m2m_cap_buf_detach(dev->m2m_dev, ctx->fh.m2m_ctx);
+		de->src_buf = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
+		if (!de->src_buf) {
+			v4l2_err(&dev->v4l2_dev, "%s: No source buffer\n", __func__);
+			//**************
+		}
+
+		de->frame_buf = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
 		if (!de->frame_buf) {
 			v4l2_err(&dev->v4l2_dev, "%s: No detached buffer\n", __func__);
 			//**************
 		}
-
-		// Enable the next setup if our Q isn't too big && we aren't
-		// using the src buffer (which we can't detach yet)
-		// * Really need to look into better Q handling
-		if (atomic_add_return(1, &ctx->p1out) < RPIVID_P1BUF_COUNT &&
-		    de->p1local) {
-			xtrace_fin(dev, de);
-			v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
-							 VB2_BUF_STATE_DONE);
+		if (de->frame_buf->vb2_buf.req_obj.req) {
+			v4l2_err(&dev->v4l2_dev, "%s: Frame buf already has req\n", __func__);
 		}
 
+		v4l2_err(&dev->v4l2_dev, "%s: Init\n", __func__);
+		media_request_object_init(&de->req_obj);
+		v4l2_err(&dev->v4l2_dev, "%s: Bind\n", __func__);
+		media_request_object_bind(de->src_buf->vb2_buf.req_obj.req,
+					  &dst_req_obj_ops, de, false,
+					  &de->req_obj);
+
+		v4l2_err(&dev->v4l2_dev, "%s: Flow: bound req=%p\n", __func__, de->req_obj.req);
+		// Enable the next setup if our Q isn't too big
+		if (atomic_add_return(1, &ctx->p1out) < RPIVID_P1BUF_COUNT) {
+			xtrace_fin(dev, de);
+			v4l2_m2m_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx);
+		}
+
+		v4l2_err(&dev->v4l2_dev, "%s: Claim\n", __func__);
 		rpivid_hw_irq_active1_claim(dev, &de->irq_ent, phase1_claimed,
 					    de);
 		break;
