@@ -216,7 +216,6 @@ struct rpivid_dec_env {
 	u32 rpi_framesize;
 	u32 rpi_currpoc;
 
-	bool p1local;
 	struct vb2_v4l2_buffer *frame_buf; // Detached dest buffer
 	struct vb2_v4l2_buffer *src_buf;   // Detached src buffer
 	unsigned int frame_c_offset;
@@ -1641,7 +1640,6 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 		de->frame_addr =
 			vb2_dma_contig_plane_dma_addr(&run->dst->vb2_buf, 0);
 		de->frame_aux = NULL;
-		de->p1local = false;
 
 		if (s->sps.bit_depth_luma_minus8 !=
 		    s->sps.bit_depth_chroma_minus8) {
@@ -1772,13 +1770,11 @@ static void rpivid_h265_setup(struct rpivid_ctx *ctx, struct rpivid_run *run)
 	// Either map src buffer or use directly
 	s->src_addr = 0;
 	s->src_buf = NULL;
-	if (s->frame_end && !de->p1local)
+	if (s->frame_end)
 		s->src_addr = vb2_dma_contig_plane_dma_addr(&run->src->vb2_buf,
 							    0);
-	if (!s->src_addr) {
+	if (!s->src_addr)
 		s->src_buf = vb2_plane_vaddr(&run->src->vb2_buf, 0);
-		de->p1local = true;
-	}
 	if (!s->src_addr && !s->src_buf) {
 		v4l2_err(&dev->v4l2_dev, "Failed to map src buffer\n");
 		goto fail;
@@ -1977,7 +1973,7 @@ static int check_status(const struct rpivid_dev *const dev)
 	return -1;
 }
 
-static void cb_phase2(struct rpivid_dev *const dev, void *v)
+static void phase2_cb(struct rpivid_dev *const dev, void *v)
 {
 	struct rpivid_dec_env *const de = v;
 
@@ -2049,7 +2045,7 @@ static void phase2_claimed(struct rpivid_dev *const dev, void *v)
 	//	   de->ctx->colmvbuf.addr, de->ctx->colmvbuf.addr +
 	//	   de->ctx->colmvbuf.size);
 
-	rpivid_hw_irq_active2_irq(dev, &de->irq_ent, cb_phase2, de);
+	rpivid_hw_irq_active2_irq(dev, &de->irq_ent, phase2_cb, de);
 
 	apb_write_final(dev, RPI_NUMROWS, de->pic_height_in_ctbs_y);
 
@@ -2134,7 +2130,7 @@ fail:
 }
 
 /* Always called in irq context (this is good) */
-static void cb_phase1(struct rpivid_dev *const dev, void *v)
+static void phase1_cb(struct rpivid_dev *const dev, void *v)
 {
 	struct rpivid_dec_env *const de = v;
 	struct rpivid_ctx *const ctx = de->ctx;
@@ -2214,7 +2210,7 @@ static void phase1_claimed(struct rpivid_dev *const dev, void *v)
 	apb_write(dev, RPI_CFNUM, de->cmd_len);
 
 	// Claim irq
-	rpivid_hw_irq_active1_irq(dev, &de->irq_ent, cb_phase1, de);
+	rpivid_hw_irq_active1_irq(dev, &de->irq_ent, phase1_cb, de);
 
 	// And start the h/w
 	apb_write_vc_addr_final(dev, RPI_CFBASE, de->cmd_copy_gptr->addr);
@@ -2404,6 +2400,11 @@ static void rpivid_h265_trigger(struct rpivid_ctx *ctx)
 		media_request_object_bind(de->src_buf->vb2_buf.req_obj.req,
 					  &dst_req_obj_ops, de, false,
 					  de->req_obj);
+
+		/* We could get rid of the src buffer here if we've already
+		 * copied it, but we don't copy the last buffer unless it
+		 * didn't return a contig dma addr and that shouldn't happen
+		*/
 
 		/* Enable the next setup if our Q isn't too big */
 		if (atomic_add_return(1, &ctx->p1out) < RPIVID_P1BUF_COUNT) {
