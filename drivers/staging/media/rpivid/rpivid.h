@@ -49,6 +49,7 @@ struct rpivid_control {
 };
 
 struct rpivid_h265_run {
+	u32 slice_ents;
 	const struct v4l2_ctrl_hevc_sps			*sps;
 	const struct v4l2_ctrl_hevc_pps			*pps;
 	const struct v4l2_ctrl_hevc_slice_params	*slice_params;
@@ -187,6 +188,7 @@ struct rpivid_dev {
 
 extern struct rpivid_dec_ops rpivid_dec_ops_h265;
 
+struct v4l2_ctrl *rpivid_find_ctrl(struct rpivid_ctx *ctx, u32 id);
 void *rpivid_find_control_data(struct rpivid_ctx *ctx, u32 id);
 
 #endif
