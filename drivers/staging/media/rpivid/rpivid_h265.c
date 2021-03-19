@@ -238,7 +238,7 @@ struct rpivid_dec_env {
 	u16 slice_msgs[2 * HEVC_MAX_REFS * 8 + 3];
 	u8 scaling_factors[NUM_SCALING_FACTORS];
 
-	struct media_request_object req_obj;
+	struct media_request_object *req_obj;
 	struct rpivid_hw_irq_ent irq_ent;
 };
 
@@ -289,7 +289,7 @@ struct rpivid_dec_state {
 
 static void dst_req_obj_release(struct media_request_object *object)
 {
-	// This is part of de - needs nothing doing to release
+	kfree(object);
 }
 
 static const struct media_request_object_ops dst_req_obj_ops = {
@@ -1989,7 +1989,8 @@ static void cb_phase2(struct rpivid_dev *const dev, void *v)
 	v4l2_m2m_buf_done(de->frame_buf, VB2_BUF_STATE_DONE);
 	de->frame_buf = NULL;
 
-	media_request_object_complete(&de->req_obj);
+	media_request_object_complete(de->req_obj);
+	de->req_obj = NULL;
 
 	xtrace_ok(dev, de);
 	dec_env_delete(de);
@@ -2070,9 +2071,10 @@ static void phase1_err_fin(struct rpivid_dev *const dev,
 	if (de->frame_buf)
 		v4l2_m2m_buf_done(de->frame_buf, VB2_BUF_STATE_ERROR);
 	de->frame_buf = NULL;
-	if (de->req_obj.req)
-		media_request_object_complete(&de->req_obj);
-	media_request_object_init(&de->req_obj);
+	if (de->req_obj)
+		media_request_object_complete(de->req_obj);
+	de->req_obj = NULL;
+
 	dec_env_delete(de);
 
 	/* Reenable phase 0 if we were blocking */
@@ -2140,6 +2142,7 @@ static void cb_phase1(struct rpivid_dev *const dev, void *v)
 	xtrace_in(dev, de);
 
 	de->p1_status = check_status(dev);
+
 	if (de->p1_status != 0) {
 		v4l2_info(&dev->v4l2_dev, "%s: Post wait: %#x\n",
 			  __func__, de->p1_status);
@@ -2172,8 +2175,8 @@ static void cb_phase1(struct rpivid_dev *const dev, void *v)
 	return;
 
 fail:
-	phase1_err_fin(dev, ctx, de);
 	xtrace_fail(dev, de);
+	phase1_err_fin(dev, ctx, de);
 }
 
 static void phase1_claimed(struct rpivid_dev *const dev, void *v)
@@ -2354,7 +2357,9 @@ static void rpivid_h265_trigger(struct rpivid_ctx *ctx)
 	case RPIVID_DECODE_SLICE_CONTINUE:
 		v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
 						 VB2_BUF_STATE_DONE);
+		xtrace_ok(dev, de);
 		break;
+
 	default:
 		v4l2_err(&dev->v4l2_dev, "%s: Unexpected state: %d\n", __func__,
 			 de->state);
@@ -2368,50 +2373,49 @@ static void rpivid_h265_trigger(struct rpivid_ctx *ctx)
 		v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx,
 						 VB2_BUF_STATE_ERROR);
 		break;
+
 	case RPIVID_DECODE_PHASE1:
 		ctx->dec0 = NULL;
+
+		/* Alloc a new request object - needs to be alloced dynamically
+		 * as the media request will release it some random time after
+		 * it is completed
+		*/
+		de->req_obj = kmalloc(sizeof(*de->req_obj), GFP_KERNEL);
+		if (!de->req_obj) {
+			v4l2_err(&dev->v4l2_dev, "%s: req_obj alloc failed\n",
+				 __func__);
+			xtrace_fail(dev, de);
+			dec_env_delete(de);
+			v4l2_m2m_buf_done_and_job_finish(dev->m2m_dev,
+							 ctx->fh.m2m_ctx,
+							 VB2_BUF_STATE_ERROR);
+			break;
+		}
+		media_request_object_init(de->req_obj);
+
 		ctx->p1idx = (ctx->p1idx + 1 >= RPIVID_P1BUF_COUNT) ?
 							0 : ctx->p1idx + 1;
 
-		/* After the frame-buf is detached it must be returned but from
-		 * **** and that code is missing from all error paths
-		 */
+		/* We know we have src & dst so no need to test */
 		de->src_buf = v4l2_m2m_src_buf_remove(ctx->fh.m2m_ctx);
-		if (!de->src_buf) {
-			v4l2_err(&dev->v4l2_dev, "%s: No source buffer\n", __func__);
-			//**************
-		}
-
 		de->frame_buf = v4l2_m2m_dst_buf_remove(ctx->fh.m2m_ctx);
-		if (!de->frame_buf) {
-			v4l2_err(&dev->v4l2_dev, "%s: No detached buffer\n", __func__);
-			//**************
-		}
-		if (de->frame_buf->vb2_buf.req_obj.req) {
-			v4l2_err(&dev->v4l2_dev, "%s: Frame buf already has req\n", __func__);
-		}
 
-		v4l2_err(&dev->v4l2_dev, "%s: Init\n", __func__);
-		media_request_object_init(&de->req_obj);
-		v4l2_err(&dev->v4l2_dev, "%s: Bind\n", __func__);
 		media_request_object_bind(de->src_buf->vb2_buf.req_obj.req,
 					  &dst_req_obj_ops, de, false,
-					  &de->req_obj);
+					  de->req_obj);
 
-		v4l2_err(&dev->v4l2_dev, "%s: Flow: bound req=%p\n", __func__, de->req_obj.req);
-		// Enable the next setup if our Q isn't too big
+		/* Enable the next setup if our Q isn't too big */
 		if (atomic_add_return(1, &ctx->p1out) < RPIVID_P1BUF_COUNT) {
 			xtrace_fin(dev, de);
 			v4l2_m2m_job_finish(dev->m2m_dev, ctx->fh.m2m_ctx);
 		}
 
-		v4l2_err(&dev->v4l2_dev, "%s: Claim\n", __func__);
 		rpivid_hw_irq_active1_claim(dev, &de->irq_ent, phase1_claimed,
 					    de);
+		xtrace_ok(dev, de);
 		break;
 	}
-
-	xtrace_ok(dev, de);
 }
 
 struct rpivid_dec_ops rpivid_dec_ops_h265 = {
