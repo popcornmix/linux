@@ -114,7 +114,6 @@ struct rpivid_ctx {
 	unsigned int p1idx;
 	atomic_t p1out;
 	struct rpivid_gptr bitbufs[RPIVID_P1BUF_COUNT];
-	struct rpivid_gptr cmdbufs[RPIVID_P1BUF_COUNT];
 
 	/* *** Should be in dev *** */
 	unsigned int p2idx;
@@ -181,6 +180,8 @@ struct rpivid_dev {
 	void __iomem		*base_h265;
 
 	struct clk		*clock;
+
+	int			cache_align;
 
 	struct rpivid_hw_irq_ctrl ic_active1;
 	struct rpivid_hw_irq_ctrl ic_active2;
