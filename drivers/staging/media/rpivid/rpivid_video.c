@@ -18,6 +18,7 @@
 #include <media/v4l2-mem2mem.h>
 
 #include "rpivid.h"
+#include "rpivid_hw.h"
 #include "rpivid_video.h"
 #include "rpivid_dec.h"
 
@@ -540,52 +541,6 @@ static int rpivid_buf_prepare(struct vb2_buffer *vb)
 	return 0;
 }
 
-static int start_clock(struct rpivid_dev *dev)
-{
-	int rv = 0;
-	mutex_lock(&dev->dev_mutex);
-	if (dev->clk_count == 0) {
-		long max_hevc_clock = clk_round_rate(dev->clock, ULONG_MAX);
-
-		rv = clk_set_rate(dev->clock, max_hevc_clock);
-		if (rv) {
-			dev_err(dev->dev, "Failed to set clock rate\n");
-			goto done;
-		}
-
-		rv = clk_prepare_enable(dev->clock);
-		if (rv) {
-			dev_err(dev->dev, "Failed to enable clock\n");
-			goto done;
-		}
-	}
-	++dev->clk_count;
-
-done:
-	mutex_unlock(&dev->dev_mutex);
-	return rv;
-}
-
-static void stop_clock(struct rpivid_dev *dev)
-{
-	mutex_lock(&dev->dev_mutex);
-	if (dev->clk_count == 0) {
-		dev_err(dev->dev, "Clock count underflow\n");
-	}
-	else {
-		int rv;
-		const long min_hevc_clock = clk_round_rate(dev->clock, 0);
-
-		rv = clk_set_rate(dev->clock, min_hevc_clock);
-		if (rv)
-			dev_err(dev->dev, "Failed to reset clock rate\n");
-
-		clk_disable_unprepare(dev->clock);
-		--dev->clk_count;
-	}
-	mutex_unlock(&dev->dev_mutex);
-}
-
 static int rpivid_start_streaming(struct vb2_queue *vq, unsigned int count)
 {
 	struct rpivid_ctx *ctx = vb2_get_drv_priv(vq);
@@ -606,7 +561,7 @@ static int rpivid_start_streaming(struct vb2_queue *vq, unsigned int count)
 		goto ok;
 
 	if (!ctx->clk_on) {
-		ret = start_clock(dev);
+		ret = rpivid_hw_start_clock(dev);
 		if (ret)
 			goto fail;
 		ctx->clk_on = 1;
@@ -648,7 +603,7 @@ static void rpivid_stop_streaming(struct vb2_queue *vq)
 	if (!ctx->src_stream_on &&
 	    !ctx->dst_stream_on &&
 	    ctx->clk_on) {
-		stop_clock(dev);
+		rpivid_hw_stop_clock(dev);
 		ctx->clk_on = 0;
 	}
 }

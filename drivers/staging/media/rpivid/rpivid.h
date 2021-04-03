@@ -192,6 +192,8 @@ struct rpivid_dev {
 	void __iomem		*base_irq;
 	void __iomem		*base_h265;
 
+	/* Protects clk_count & operations on clock */
+	struct mutex		clk_mutex;
 	int 			clk_count;
 	struct clk		*clock;
 

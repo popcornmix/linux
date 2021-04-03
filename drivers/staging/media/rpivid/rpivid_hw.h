@@ -297,6 +297,16 @@ void rpivid_hw_irq_active2_irq(struct rpivid_dev *dev,
 			       struct rpivid_hw_irq_ent *ient,
 			       rpivid_irq_callback irq_cb, void *ctx);
 
+/* Start the device clock
+ * Ref counted so be careful to match start/stops
+*/
+int rpivid_hw_start_clock(struct rpivid_dev *dev);
+
+/* Stop the device clock
+ * Ref counted so be careful to match start/stops
+*/
+void rpivid_hw_stop_clock(struct rpivid_dev *dev);
+
 int rpivid_hw_probe(struct rpivid_dev *dev);
 void rpivid_hw_remove(struct rpivid_dev *dev);
 
