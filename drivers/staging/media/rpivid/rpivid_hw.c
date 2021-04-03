@@ -301,6 +301,52 @@ void rpivid_hw_irq_active2_irq(struct rpivid_dev *dev,
 	pre_irq(dev, ient, irq_cb, ctx, &dev->ic_active2);
 }
 
+int rpivid_hw_start_clock(struct rpivid_dev *dev)
+{
+	int rv = 0;
+	mutex_lock(&dev->clk_mutex);
+	if (dev->clk_count == 0) {
+		long max_hevc_clock = clk_round_rate(dev->clock, ULONG_MAX);
+
+		rv = clk_set_rate(dev->clock, max_hevc_clock);
+		if (rv) {
+			dev_err(dev->dev, "Failed to set clock rate\n");
+			goto done;
+		}
+
+		rv = clk_prepare_enable(dev->clock);
+		if (rv) {
+			dev_err(dev->dev, "Failed to enable clock\n");
+			goto done;
+		}
+	}
+	++dev->clk_count;
+
+done:
+	mutex_unlock(&dev->clk_mutex);
+	return rv;
+}
+
+void rpivid_hw_stop_clock(struct rpivid_dev *dev)
+{
+	mutex_lock(&dev->clk_mutex);
+	if (dev->clk_count == 0) {
+		dev_err(dev->dev, "Clock count underflow\n");
+	}
+	else {
+		int rv;
+		const long min_hevc_clock = clk_round_rate(dev->clock, 0);
+
+		rv = clk_set_rate(dev->clock, min_hevc_clock);
+		if (rv)
+			dev_err(dev->dev, "Failed to reset clock rate\n");
+
+		clk_disable_unprepare(dev->clock);
+		--dev->clk_count;
+	}
+	mutex_unlock(&dev->clk_mutex);
+}
+
 int rpivid_hw_probe(struct rpivid_dev *dev)
 {
 	struct resource *res;
@@ -327,6 +373,7 @@ int rpivid_hw_probe(struct rpivid_dev *dev)
 	if (IS_ERR(dev->base_h265))
 		return PTR_ERR(dev->base_h265);
 
+	mutex_init(&dev->clk_mutex);
 	dev->clock = devm_clk_get(&dev->pdev->dev, "hevc");
 	if (IS_ERR(dev->clock))
 		return PTR_ERR(dev->clock);
@@ -358,7 +405,9 @@ int rpivid_hw_probe(struct rpivid_dev *dev)
 
 void rpivid_hw_remove(struct rpivid_dev *dev)
 {
+	mutex_destroy(&dev->clk_mutex);
 	// IRQ auto freed on unload so no need to do it here
+	// ioremap auto freed on unload
 	ictl_uninit(&dev->ic_active1);
 	ictl_uninit(&dev->ic_active2);
 }
