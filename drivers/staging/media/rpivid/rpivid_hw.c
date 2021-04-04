@@ -333,7 +333,7 @@ void rpivid_hw_stop_clock(struct rpivid_dev *dev)
 	if (dev->clk_count == 0) {
 		dev_err(dev->dev, "Clock count underflow\n");
 	}
-	else {
+	else if (--dev->clk_count == 0) {
 		int rv;
 		const long min_hevc_clock = clk_round_rate(dev->clock, 0);
 
@@ -342,7 +342,6 @@ void rpivid_hw_stop_clock(struct rpivid_dev *dev)
 			dev_err(dev->dev, "Failed to reset clock rate\n");
 
 		clk_disable_unprepare(dev->clock);
-		--dev->clk_count;
 	}
 	mutex_unlock(&dev->clk_mutex);
 }
