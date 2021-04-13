@@ -326,7 +326,7 @@ vc4_atomic_complete_commit(struct drm_atomic_state *state)
 	}
 
 	if (vc4->hvs && vc4->hvs->hvs5)
-		clk_set_rate(hvs->core_clk, 500000000);
+		clk_set_min_rate(hvs->core_clk, 500000000);
 
 	drm_atomic_helper_wait_for_fences(dev, state, false);
 
@@ -358,7 +358,7 @@ vc4_atomic_complete_commit(struct drm_atomic_state *state)
 	drm_atomic_helper_commit_cleanup_done(state);
 
 	if (vc4->hvs && vc4->hvs->hvs5)
-		clk_set_rate(hvs->core_clk, 0);
+		clk_set_min_rate(hvs->core_clk, 0);
 
 	drm_atomic_state_put(state);
 
