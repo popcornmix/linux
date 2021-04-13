@@ -308,8 +308,8 @@ int rpivid_hw_start_clock(struct rpivid_dev *dev)
 	if (dev->clk_count == 0) {
 		long max_hevc_clock = clk_round_rate(dev->clock, ULONG_MAX);
 
-		rv = clk_set_rate(dev->clock, max_hevc_clock);
-		if (rv) {
+		dev->hevc_req = clk_request_start(dev->clock, max_hevc_clock);
+		if (!dev->hevc_req) {
 			dev_err(dev->dev, "Failed to set clock rate\n");
 			goto done;
 		}
@@ -334,13 +334,7 @@ void rpivid_hw_stop_clock(struct rpivid_dev *dev)
 		dev_err(dev->dev, "Clock count underflow\n");
 	}
 	else if (--dev->clk_count == 0) {
-		int rv;
-		const long min_hevc_clock = clk_round_rate(dev->clock, 0);
-
-		rv = clk_set_rate(dev->clock, min_hevc_clock);
-		if (rv)
-			dev_err(dev->dev, "Failed to reset clock rate\n");
-
+		clk_request_done(dev->hevc_req);
 		clk_disable_unprepare(dev->clock);
 	}
 	mutex_unlock(&dev->clk_mutex);
