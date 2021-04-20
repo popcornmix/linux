@@ -852,9 +852,15 @@ static void vc4_hdmi_encoder_post_crtc_powerdown(struct drm_encoder *encoder,
 		   HDMI_READ(HDMI_VID_CTL) & ~VC4_HD_VID_CTL_ENABLE);
 
 	clk_disable_unprepare(vc4_hdmi->pixel_bvb_clock);
-	clk_request_done(vc4_hdmi->bvb_req);
+	if (vc4_hdmi->bvb_req) {
+		clk_request_done(vc4_hdmi->bvb_req);
+		vc4_hdmi->bvb_req = NULL;
+	}
 	clk_disable_unprepare(vc4_hdmi->hsm_clock);
-	clk_request_done(vc4_hdmi->hsm_req);
+	if (vc4_hdmi->hsm_req) {
+		clk_request_done(vc4_hdmi->hsm_req);
+		vc4_hdmi->hsm_req = NULL;
+	}
 	clk_disable_unprepare(vc4_hdmi->pixel_clock);
 
 	ret = pm_runtime_put(&vc4_hdmi->pdev->dev);
