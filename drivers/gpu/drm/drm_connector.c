@@ -2023,7 +2023,6 @@ int drm_connector_update_edid_property(struct drm_connector *connector,
 				       const struct edid *edid)
 {
 	struct drm_device *dev = connector->dev;
-	u32 fmts = DRM_COLOR_FORMAT_RGB444;
 	size_t size = 0;
 	int ret;
 	const struct edid *old_edid;
@@ -2064,21 +2063,25 @@ int drm_connector_update_edid_property(struct drm_connector *connector,
 		}
 	}
 
-	if ((connector->supported_output_formats & DRM_COLOR_FORMAT_YCRCB444) &&
-	    (connector->display_info.color_formats & DRM_COLOR_FORMAT_YCRCB444))
-		fmts |= DRM_COLOR_FORMAT_YCRCB444;
+	if (connector->supported_color_formats_property) {
+		u32 fmts = DRM_COLOR_FORMAT_RGB444;
 
-	if ((connector->supported_output_formats & DRM_COLOR_FORMAT_YCRCB422) &&
-	    (connector->display_info.color_formats & DRM_COLOR_FORMAT_YCRCB422))
-		fmts |= DRM_COLOR_FORMAT_YCRCB422;
+		if ((connector->supported_output_formats & DRM_COLOR_FORMAT_YCRCB444) &&
+		    (connector->display_info.color_formats & DRM_COLOR_FORMAT_YCRCB444))
+			fmts |= DRM_COLOR_FORMAT_YCRCB444;
 
-	if ((connector->supported_output_formats & DRM_COLOR_FORMAT_YCRCB420) &&
-	    (connector->display_info.color_formats & DRM_COLOR_FORMAT_YCRCB420))
-		fmts |= DRM_COLOR_FORMAT_YCRCB420;
+		if ((connector->supported_output_formats & DRM_COLOR_FORMAT_YCRCB422) &&
+		    (connector->display_info.color_formats & DRM_COLOR_FORMAT_YCRCB422))
+			fmts |= DRM_COLOR_FORMAT_YCRCB422;
 
-	drm_object_property_set_value(&connector->base,
-				      connector->supported_color_formats_property,
-				      fmts);
+		if ((connector->supported_output_formats & DRM_COLOR_FORMAT_YCRCB420) &&
+		    (connector->display_info.color_formats & DRM_COLOR_FORMAT_YCRCB420))
+			fmts |= DRM_COLOR_FORMAT_YCRCB420;
+
+		drm_object_property_set_value(&connector->base,
+					      connector->supported_color_formats_property,
+					      fmts);
+	}
 
 	drm_object_property_set_value(&connector->base,
 				      dev->mode_config.non_desktop_property,
