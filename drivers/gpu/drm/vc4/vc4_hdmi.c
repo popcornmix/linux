@@ -1508,12 +1508,19 @@ static int vc4_hdmi_encoder_atomic_check(struct drm_encoder *encoder,
 		pixel_rate = mode->clock * 1000;
 	}
 
-	if (BIT(conn_state->color_format) == DRM_COLOR_FORMAT_RGB444 ||
-	    BIT(conn_state->color_format) == DRM_COLOR_FORMAT_YCRCB444) {
-		if (conn_state->max_bpc == 12) {
+	// deep colour may push out pixel clock too high - lower depth if required
+	if (conn_state->max_bpc == 12) {
+		if (pixel_rate * 150 > vc4_hdmi->variant->max_pixel_clock * 100)
+			conn_state->max_bpc = 10;
+		else {
 			pixel_rate = pixel_rate * 150;
 			do_div(pixel_rate, 100);
-		} else if (conn_state->max_bpc == 10) {
+		}
+	}
+	if (conn_state->max_bpc == 10) {
+		if (pixel_rate * 125 > vc4_hdmi->variant->max_pixel_clock * 100)
+			conn_state->max_bpc = 8;
+		else {
 			pixel_rate = pixel_rate * 125;
 			do_div(pixel_rate, 100);
 		}
