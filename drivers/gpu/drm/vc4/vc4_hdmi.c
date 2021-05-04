@@ -1236,6 +1236,12 @@ static void vc5_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 		break;
 	}
 
+	// YCC422 is always 36-bit and not considered deep colour so doesn't signal in GCP
+	if (BIT(state->color_format) == DRM_COLOR_FORMAT_YCRCB422) {
+		gcp = 4;
+		gcp_en = false;
+	}
+
 	reg = HDMI_READ(HDMI_DEEP_COLOR_CONFIG_1);
 	reg &= ~(VC5_HDMI_DEEP_COLOR_CONFIG_1_INIT_PACK_PHASE_MASK |
 		 VC5_HDMI_DEEP_COLOR_CONFIG_1_COLOR_DEPTH_MASK);
