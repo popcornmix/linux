@@ -1002,6 +1002,8 @@ static void vc5_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 				 struct drm_connector_state *state,
 				 struct drm_display_mode *mode)
 {
+	struct vc4_hdmi_connector_state *vc4_state =
+		conn_state_to_vc4_hdmi_conn_state(state);
 	bool hsync_pos = mode->flags & DRM_MODE_FLAG_PHSYNC;
 	bool vsync_pos = mode->flags & DRM_MODE_FLAG_PVSYNC;
 	bool interlaced = mode->flags & DRM_MODE_FLAG_INTERLACE;
@@ -1063,6 +1065,12 @@ static void vc5_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 		gcp = 4;
 		gcp_en = false;
 		break;
+	}
+
+	// YCC422 is always 36-bit and not considered deep colour so doesn't signal in GCP
+	if (vc4_state->output_format == DRM_COLOR_FORMAT_YCRCB422) {
+		gcp = 4;
+		gcp_en = false;
 	}
 
 	reg = HDMI_READ(HDMI_DEEP_COLOR_CONFIG_1);
