@@ -1406,8 +1406,12 @@ vc4_hdmi_encoder_compute_config(struct vc4_hdmi *vc4_hdmi,
 				const struct drm_display_mode *mode)
 {
 	struct drm_connector_state *conn_state = &vc4_state->base;
+	struct drm_device *dev = vc4_hdmi->connector.dev;
 	unsigned int format;
 	int ret;
+
+	drm_dbg(dev, "Trying to output in RGB, with %u bpp\n",
+		conn_state->max_bpc);
 
 	format = VC4_HDMI_OUTPUT_RGB;
 	ret = vc4_hdmi_encoder_compute_clock(vc4_hdmi,
@@ -1415,13 +1419,18 @@ vc4_hdmi_encoder_compute_config(struct vc4_hdmi *vc4_hdmi,
 					     conn_state->max_bpc,
 					     format);
 	if (ret) {
+		drm_dbg(dev, "Failed. Trying in YUV422, with %u bpp\n",
+			conn_state->max_bpc);
+
 		format = VC4_HDMI_OUTPUT_YUV422;
 		ret = vc4_hdmi_encoder_compute_clock(vc4_hdmi,
 						     vc4_state, mode,
 						     conn_state->max_bpc,
 						     format);
-		if (ret)
+		if (ret) {
+			drm_dbg(dev, "Failed as well. Rejecting.\n");
 			return ret;
+		}
 	}
 
 	vc4_state->output_format = format;
