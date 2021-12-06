@@ -1608,15 +1608,15 @@ static bool vc4_hdmi_audio_can_stream(struct vc4_hdmi *vc4_hdmi)
 	/*
 	 * If the controller is disabled, prevent any ALSA output.
 	 */
-	if (!vc4_hdmi->output_enabled)
-		return false;
+	/*if (!vc4_hdmi->output_enabled)
+		return false;*/
 
 	/*
 	 * If the encoder is currently in DVI mode, treat the codec DAI
 	 * as missing.
 	 */
-	if (!(HDMI_READ(HDMI_RAM_PACKET_CONFIG) & VC4_HDMI_RAM_PACKET_ENABLE))
-		return false;
+	/*if (!(HDMI_READ(HDMI_RAM_PACKET_CONFIG) & VC4_HDMI_RAM_PACKET_ENABLE))
+		return false;*/
 
 	return true;
 }
