@@ -1386,7 +1386,7 @@ vc4_hdmi_encoder_compute_mode_clock(const struct drm_display_mode *mode,
 		clock = clock * 2;
 
 	if (fmt == VC4_HDMI_OUTPUT_YUV422)
-		clock = clock * 2 / 3;
+		bpc = 8;
 
 	return clock * bpc / 8;
 }
