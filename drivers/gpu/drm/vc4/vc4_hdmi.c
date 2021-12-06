@@ -1068,7 +1068,7 @@ static void vc5_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 	}
 
 	// YCC422 is always 36-bit and not considered deep colour so doesn't signal in GCP
-	if (vc4_state->output_format == DRM_COLOR_FORMAT_YCRCB422) {
+	if (vc4_state->output_format == VC4_HDMI_OUTPUT_YUV422) {
 		gcp = 4;
 		gcp_en = false;
 	}
