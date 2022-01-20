@@ -236,6 +236,8 @@ static void vc4_hdmi_cec_update_clk_div(struct vc4_hdmi *vc4_hdmi) {}
 
 static void vc4_hdmi_enable_scrambling(struct drm_encoder *encoder);
 
+#define CEC_POLLING_DELAY_MS	1000
+
 static enum drm_connector_status
 vc4_hdmi_connector_detect(struct drm_connector *connector, bool force)
 {
@@ -262,6 +264,8 @@ vc4_hdmi_connector_detect(struct drm_connector *connector, bool force)
 			struct edid *edid = drm_get_edid(connector, vc4_hdmi->ddc);
 
 			if (edid) {
+				if (delayed_work_pending(&vc4_hdmi->cec_work))
+					cancel_delayed_work_sync(&vc4_hdmi->cec_work);
 				cec_s_phys_addr_from_edid(vc4_hdmi->cec_adap, edid);
 				vc4_hdmi->encoder.hdmi_monitor = drm_detect_hdmi_monitor(edid);
 				kfree(edid);
@@ -278,7 +282,8 @@ vc4_hdmi_connector_detect(struct drm_connector *connector, bool force)
 
 	vc4_hdmi->encoder.hdmi_monitor = false;
 
-	cec_phys_addr_invalidate(vc4_hdmi->cec_adap);
+	queue_delayed_work(system_wq, &vc4_hdmi->cec_work,
+			msecs_to_jiffies(CEC_POLLING_DELAY_MS));
 
 out:
 	pm_runtime_put(&vc4_hdmi->pdev->dev);
@@ -851,6 +856,14 @@ static void vc4_hdmi_scrambling_wq(struct work_struct *work)
 
 	queue_delayed_work(system_wq, &vc4_hdmi->scrambling_work,
 			   msecs_to_jiffies(SCRAMBLING_POLLING_DELAY_MS));
+}
+
+static void vc4_hdmi_cec_wq(struct work_struct *work)
+{
+	struct vc4_hdmi *vc4_hdmi = container_of(to_delayed_work(work),
+						 struct vc4_hdmi,
+						 cec_work);
+	cec_phys_addr_invalidate(vc4_hdmi->cec_adap);
 }
 
 static void vc4_hdmi_encoder_post_crtc_disable(struct drm_encoder *encoder,
@@ -3059,6 +3072,7 @@ static int vc4_hdmi_bind(struct device *dev, struct device *master, void *data)
 	mutex_init(&vc4_hdmi->mutex);
 	spin_lock_init(&vc4_hdmi->hw_lock);
 	INIT_DELAYED_WORK(&vc4_hdmi->scrambling_work, vc4_hdmi_scrambling_wq);
+	INIT_DELAYED_WORK(&vc4_hdmi->cec_work, vc4_hdmi_cec_wq);
 
 	dev_set_drvdata(dev, vc4_hdmi);
 	encoder = &vc4_hdmi->encoder.base.base;

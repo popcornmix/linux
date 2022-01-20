@@ -141,6 +141,7 @@ struct vc4_hdmi {
 	struct drm_connector connector;
 
 	struct delayed_work scrambling_work;
+	struct delayed_work cec_work;
 
 	struct drm_property *broadcast_rgb_property;
 
