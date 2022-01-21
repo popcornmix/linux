@@ -39,6 +39,8 @@
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/i2c.h>
+#include <linux/module.h>
+#include <linux/moduleparam.h>
 #include <linux/of_address.h>
 #include <linux/of_gpio.h>
 #include <linux/of_platform.h>
@@ -110,6 +112,12 @@
 #define HSM_MIN_CLOCK_FREQ	120000000
 #define CEC_CLOCK_FREQ 40000
 #define HDMI_14_MAX_TMDS_CLK   (340 * 1000 * 1000)
+
+static int inval_delay = 1000;
+module_param(inval_delay, int, 0644);
+
+static int cec_debug = 0;
+module_param(cec_debug, int, 0644);
 
 static const char * const output_format_str[] = {
 	[VC4_HDMI_OUTPUT_RGB]		= "RGB",
@@ -237,6 +245,7 @@ static void vc4_hdmi_cec_update_clk_div(struct vc4_hdmi *vc4_hdmi) {}
 static void vc4_hdmi_enable_scrambling(struct drm_encoder *encoder);
 
 #define CEC_POLLING_DELAY_MS	1000
+static void vc4_hdmi_cec_wq(struct work_struct *work);
 
 static enum drm_connector_status
 vc4_hdmi_connector_detect(struct drm_connector *connector, bool force)
@@ -244,6 +253,7 @@ vc4_hdmi_connector_detect(struct drm_connector *connector, bool force)
 	struct vc4_hdmi *vc4_hdmi = connector_to_vc4_hdmi(connector);
 	enum drm_connector_status ret = connector_status_disconnected;
 	bool connected = false;
+	const char *connected_string[] = { "Zero", "connected", "disconnected", "unknown" };
 
 	mutex_lock(&vc4_hdmi->mutex);
 
@@ -258,18 +268,29 @@ vc4_hdmi_connector_detect(struct drm_connector *connector, bool force)
 		    vc4_hdmi->variant->hp_detect(vc4_hdmi))
 			connected = true;
 	}
+	if (cec_debug & 0x100)
+		connected = true;
+	else if (cec_debug & 0x200)
+		connected = false;
 
+	printk("%s: connected:%d (status %s)\n", vc4_hdmi->variant->card_name, connected, connected_string[connector->status]);
 	if (connected) {
 		if (connector->status != connector_status_connected) {
 			struct edid *edid = drm_get_edid(connector, vc4_hdmi->ddc);
 
 			if (edid) {
-				if (delayed_work_pending(&vc4_hdmi->cec_work))
+				if (delayed_work_pending(&vc4_hdmi->cec_work)) {
+					printk("%s: Cancel cec_phys_addr_invalidate\n", vc4_hdmi->variant->card_name);
 					cancel_delayed_work_sync(&vc4_hdmi->cec_work);
-				cec_s_phys_addr_from_edid(vc4_hdmi->cec_adap, edid);
+				}
+				if (!(cec_debug & 1)) {
+					printk("%s: cec_s_phys_addr_from_edid (vc4_hdmi_connector_detect)\n", vc4_hdmi->variant->card_name);
+					cec_s_phys_addr_from_edid(vc4_hdmi->cec_adap, edid);
+				}
 				vc4_hdmi->encoder.hdmi_monitor = drm_detect_hdmi_monitor(edid);
 				kfree(edid);
 			} else {
+				printk("%s: cec_phys_addr_invalidate - no edid\n", vc4_hdmi->variant->card_name);
 				vc4_hdmi->encoder.hdmi_monitor = false;
 			}
 		}
@@ -282,8 +303,17 @@ vc4_hdmi_connector_detect(struct drm_connector *connector, bool force)
 
 	vc4_hdmi->encoder.hdmi_monitor = false;
 
-	queue_delayed_work(system_wq, &vc4_hdmi->cec_work,
-			msecs_to_jiffies(CEC_POLLING_DELAY_MS));
+	/*if (delayed_work_pending(&vc4_hdmi->cec_work)) {
+		printk("%s: Reschedule cec_phys_addr_invalidate\n", vc4_hdmi->variant->card_name);
+		cancel_delayed_work_sync(&vc4_hdmi->cec_work);
+	} else */{
+		printk("%s: Schedule cec_phys_addr_invalidate\n", vc4_hdmi->variant->card_name);
+	}
+	if (inval_delay)
+		queue_delayed_work(system_wq, &vc4_hdmi->cec_work,
+			msecs_to_jiffies(inval_delay));
+	else
+		vc4_hdmi_cec_wq(&vc4_hdmi->cec_work.work);
 
 out:
 	pm_runtime_put(&vc4_hdmi->pdev->dev);
@@ -307,7 +337,10 @@ static int vc4_hdmi_connector_get_modes(struct drm_connector *connector)
 	mutex_lock(&vc4_hdmi->mutex);
 
 	edid = drm_get_edid(connector, vc4_hdmi->ddc);
-	cec_s_phys_addr_from_edid(vc4_hdmi->cec_adap, edid);
+	if (!(cec_debug & 2)) {
+		printk("%s: cec_s_phys_addr_from_edid (vc4_hdmi_connector_get_modes)\n", vc4_hdmi->variant->card_name);
+		cec_s_phys_addr_from_edid(vc4_hdmi->cec_adap, edid);
+	}
 	if (!edid) {
 		ret = -ENODEV;
 		goto out;
@@ -863,7 +896,10 @@ static void vc4_hdmi_cec_wq(struct work_struct *work)
 	struct vc4_hdmi *vc4_hdmi = container_of(to_delayed_work(work),
 						 struct vc4_hdmi,
 						 cec_work);
-	cec_phys_addr_invalidate(vc4_hdmi->cec_adap);
+	if (!(cec_debug & 4)) {
+		printk("%s: Do cec_phys_addr_invalidate\n", vc4_hdmi->variant->card_name);
+		cec_phys_addr_invalidate(vc4_hdmi->cec_adap);
+	}
 }
 
 static void vc4_hdmi_encoder_post_crtc_disable(struct drm_encoder *encoder,
@@ -1845,6 +1881,8 @@ static bool vc5_hdmi_hp_detect(struct vc4_hdmi *vc4_hdmi)
 	spin_lock_irqsave(&vc4_hdmi->hw_lock, flags);
 	hotplug = HDMI_READ(HDMI_HOTPLUG);
 	spin_unlock_irqrestore(&vc4_hdmi->hw_lock, flags);
+
+	printk("%s: vc5_hdmi_hp_detect: %x\n", vc4_hdmi->variant->card_name, hotplug);
 
 	return !!(hotplug & VC4_HDMI_HOTPLUG_CONNECTED);
 }
