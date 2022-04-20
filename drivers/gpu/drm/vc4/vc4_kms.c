@@ -354,8 +354,7 @@ static void vc4_atomic_commit_tail(struct drm_atomic_state *state)
 	struct vc4_hvs_state *new_hvs_state;
 	struct drm_crtc *crtc;
 	struct vc4_hvs_state *old_hvs_state;
-	unsigned long max_clock_rate =
-		hvs->vc5_hdmi_enable_scrambling ? 550000000 : 500000000;
+	unsigned long max_clock_rate = clk_get_max_rate(hvs->core_clk);
 	unsigned int channel;
 	int i;
 
