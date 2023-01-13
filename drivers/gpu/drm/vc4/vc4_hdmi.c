@@ -1609,7 +1609,7 @@ static void vc5_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 		break;
 	case 8:
 	default:
-		gcp = 0;
+		gcp = 4;
 		break;
 	}
 
@@ -1618,7 +1618,7 @@ static void vc5_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 	 * doesn't signal in GCP.
 	 */
 	if (vc4_state->output_format == VC4_HDMI_OUTPUT_YUV422) {
-		gcp = 0;
+		gcp = 4;
 	}
 
 	reg = HDMI_READ(HDMI_DEEP_COLOR_CONFIG_1);
