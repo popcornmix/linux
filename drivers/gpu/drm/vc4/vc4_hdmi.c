@@ -1428,7 +1428,7 @@ static void vc5_hdmi_csc_setup(struct vc4_hdmi *vc4_hdmi,
 	drm_dev_exit(idx);
 }
 
-static void vc4_hdmi_set_avmute(struct vc4_hdmi *vc4_hdmi, bool mute)
+static void vc4_hdmi_set_avmute(struct vc4_hdmi *vc4_hdmi, bool mute, int gcp)
 {
 	struct drm_encoder *encoder = &vc4_hdmi->encoder.base;
 	u32 packet_id = 0;
@@ -1443,7 +1443,8 @@ static void vc4_hdmi_set_avmute(struct vc4_hdmi *vc4_hdmi, bool mute)
 	 * The "set mute" flag is bit zero, "clear mute" is bit 4.
 	 * See HDMI spec, section 5.3.6
 	*/
-	u32 ram_value = mute ? 0x01 : 0x10;
+	u32 ram_value = (mute ? 0x01 : 0x10) | ((gcp & 0xf) << 8);
+	printk("%s: mute:%d gcp:%d ram:%x\n", __func__, mute, gcp, ram_value);
 
 	ret = vc4_hdmi_stop_packet(encoder, 0x80 + packet_id, true);
 	if (ret) {
@@ -1537,7 +1538,7 @@ static void vc4_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 
 	spin_unlock_irqrestore(&vc4_hdmi->hw_lock, flags);
 
-	vc4_hdmi_set_avmute(vc4_hdmi, false);
+	vc4_hdmi_set_avmute(vc4_hdmi, false, 0);
 
 	drm_dev_exit(idx);
 }
@@ -1628,17 +1629,6 @@ static void vc5_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 	       VC4_SET_FIELD(gcp, VC5_HDMI_DEEP_COLOR_CONFIG_1_COLOR_DEPTH);
 	HDMI_WRITE(HDMI_DEEP_COLOR_CONFIG_1, reg);
 
-	reg = HDMI_READ(HDMI_GCP_WORD_1);
-	reg &= ~VC5_HDMI_GCP_WORD_1_GCP_SUBPACKET_BYTE_1_MASK;
-	reg |= VC4_SET_FIELD(gcp, VC5_HDMI_GCP_WORD_1_GCP_SUBPACKET_BYTE_1);
-	reg &= ~VC5_HDMI_GCP_WORD_1_GCP_SUBPACKET_BYTE_0_MASK;
-	reg |= VC5_HDMI_GCP_WORD_1_GCP_SUBPACKET_BYTE_0_CLEAR_AVMUTE;
-	HDMI_WRITE(HDMI_GCP_WORD_1, reg);
-
-	reg = HDMI_READ(HDMI_GCP_CONFIG);
-	reg |= VC5_HDMI_GCP_CONFIG_GCP_ENABLE;
-	HDMI_WRITE(HDMI_GCP_CONFIG, reg);
-
 	reg = HDMI_READ(HDMI_MISC_CONTROL);
 	reg &= ~VC5_HDMI_MISC_CONTROL_PIXEL_REP_MASK;
 	reg |= VC4_SET_FIELD(pixel_rep - 1, VC5_HDMI_MISC_CONTROL_PIXEL_REP);
@@ -1647,6 +1637,8 @@ static void vc5_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 	HDMI_WRITE(HDMI_CLOCK_STOP, 0);
 
 	spin_unlock_irqrestore(&vc4_hdmi->hw_lock, flags);
+
+	vc4_hdmi_set_avmute(vc4_hdmi, false, gcp);
 
 	drm_dev_exit(idx);
 }
