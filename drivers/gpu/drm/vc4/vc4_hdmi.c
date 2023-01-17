@@ -1535,6 +1535,8 @@ static void vc4_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 	reg |= VC4_SET_FIELD(pixel_rep - 1, VC4_HDMI_MISC_CONTROL_PIXEL_REP);
 	HDMI_WRITE(HDMI_MISC_CONTROL, reg);
 
+	HDMI_WRITE(HDMI_RAM_PACKET_CONFIG, 0);
+
 	spin_unlock_irqrestore(&vc4_hdmi->hw_lock, flags);
 
 	vc4_hdmi_set_avmute(vc4_hdmi, false);
@@ -1620,6 +1622,8 @@ static void vc5_hdmi_set_timings(struct vc4_hdmi *vc4_hdmi,
 	if (vc4_state->output_format == VC4_HDMI_OUTPUT_YUV422) {
 		gcp = 0;
 	}
+
+	HDMI_WRITE(HDMI_RAM_PACKET_CONFIG, 0);
 
 	reg = HDMI_READ(HDMI_DEEP_COLOR_CONFIG_1);
 	reg &= ~(VC5_HDMI_DEEP_COLOR_CONFIG_1_INIT_PACK_PHASE_MASK |
