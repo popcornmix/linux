@@ -2630,6 +2630,11 @@ static int vc4_hdmi_audio_prepare(struct device *dev, void *data,
 	spin_unlock_irqrestore(&vc4_hdmi->hw_lock, flags);
 
 	memcpy(&vc4_hdmi->audio.infoframe, &params->cea, sizeof(params->cea));
+
+	if (params->iec.status[0] & IEC958_AES0_NONAUDIO) {
+		vc4_hdmi->audio.infoframe.channels = 0;
+		vc4_hdmi->audio.infoframe.channel_allocation = 0;
+	}
 	vc4_hdmi_set_audio_infoframe(encoder);
 
 out_dev_exit:
