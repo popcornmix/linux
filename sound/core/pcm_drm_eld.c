@@ -40,18 +40,27 @@ static unsigned int sad_max_channels(const u8 *sad)
 
 static unsigned int sad_rate_mask(const u8 *sad)
 {
+	unsigned int s = 0;
 	switch (sad_format(sad)) {
 	case HDMI_AUDIO_CODING_TYPE_AC3:
 	case HDMI_AUDIO_CODING_TYPE_DTS:
-		return 0x07; // 32-48kHz
+		s = 0x07; // 32-48kHz
+		break;
 	case HDMI_AUDIO_CODING_TYPE_EAC3:
-		return 0x7f; // 32-192kHz
+		s = 0x7f; // 32-192kHz
+		break;
 	case HDMI_AUDIO_CODING_TYPE_DTS_HD:
 	case HDMI_AUDIO_CODING_TYPE_MLP:
-		return 0x60; // 176.4, 192kHz
+		if (sad[1] & 0x2a)
+			s |= 0x20; // 176kHz
+		if (sad[1] & 0x54)
+			s |= 0x40; // 192kHz
+		break;
 	default:
-		return sad[1] & 0x7f;
+		s = sad[1] & 0x7f;
+		break;
 	}
+	return s;
 }
 
 static int eld_limit_rates(struct snd_pcm_hw_params *params,
