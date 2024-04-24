@@ -345,6 +345,15 @@ static int __init numa_register_nodes(void)
 	int nid;
 	struct memblock_region *mblk;
 
+	for_each_mem_region(mblk) {
+		int mblk_nid = memblock_get_region_node(mblk);
+		phys_addr_t start = mblk->base;
+		phys_addr_t end = mblk->base + mblk->size - 1;
+
+		pr_info("memblk node %d [mem %pap-%pap]\n",
+			mblk_nid, &start, &end);
+	}
+
 	/* Check that valid nid is set to memblks */
 	for_each_mem_region(mblk) {
 		int mblk_nid = memblock_get_region_node(mblk);
@@ -470,6 +479,8 @@ void __init arch_numa_init(void)
 		if (!acpi_disabled && !numa_init(arch_acpi_numa_init))
 			return;
 		if (acpi_disabled && !numa_init(of_numa_init))
+			return;
+		if (!numa_init(arm64_fake_numa_init))
 			return;
 	}
 

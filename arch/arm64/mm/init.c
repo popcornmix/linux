@@ -547,3 +547,41 @@ void dump_mem_limit(void)
 		pr_emerg("Memory Limit: none\n");
 	}
 }
+
+int __init arm64_fake_numa_init(void)
+{
+	const unsigned int nodes = 4;
+	phys_addr_t start[nodes], end[nodes];
+	unsigned long size;
+	int ret;
+
+	start[0] = memblock_start_of_DRAM();
+	end[nodes - 1] = memblock_end_of_DRAM() - 1; /* - 1 ?!?! */
+
+	size = (end[nodes - 1] - start[0] + 1) / nodes;
+
+	end[0] = start[0] + size - 1;
+
+	for (int i = 1; i < nodes - 1; i++) {
+		start[i] = end[i - 1] + 1;
+		end[i] = start[i] + size - 1;
+	} 
+	
+	start[nodes - 1] = end[nodes - 2] + 1;
+
+	pr_info("RAM [%lx - %lx] - adding fake NUMA memory nodes:\n",
+		(unsigned long)start[0], (unsigned long)end[nodes - 1]);
+
+	for (int i = 0; i < nodes; i++) {
+		pr_info("    [%lx - %lx]\n",
+			(unsigned long)start[i], (unsigned long)end[i]);
+
+		ret = numa_add_memblk(i, start[i], end[i] + 1);
+		if (ret) {
+			pr_err("Failed to add fake NUMA node 0!\n");
+			return ret;
+		}
+	}
+
+	return 0;
+}
