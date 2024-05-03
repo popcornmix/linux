@@ -102,6 +102,7 @@
 #include <linux/mmu_notifier.h>
 #include <linux/printk.h>
 #include <linux/swapops.h>
+#include <linux/random.h>
 
 #include <asm/tlbflush.h>
 #include <asm/tlb.h>
@@ -1972,8 +1973,12 @@ static unsigned offset_il_node(struct mempolicy *pol, unsigned long n)
 {
 	nodemask_t nodemask = pol->nodes;
 	unsigned int target, nnodes;
+	unsigned long rand = get_random_long();
 	int i;
 	int nid;
+
+	n += rand;
+
 	/*
 	 * The barrier will stabilize the nodemask in a register or on
 	 * the stack so that it will stop changing under the code.
