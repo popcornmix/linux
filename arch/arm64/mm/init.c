@@ -550,7 +550,7 @@ void dump_mem_limit(void)
 
 int __init arm64_fake_numa_init(void)
 {
-	const unsigned int nodes = 2;
+	const unsigned int nodes = 8;
 	phys_addr_t start[nodes], end[nodes];
 	unsigned long size;
 	int ret;
