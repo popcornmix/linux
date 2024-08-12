@@ -668,7 +668,6 @@ static void vc4_crtc_atomic_disable(struct drm_crtc *crtc,
 	 * someone was waiting it.
 	 */
 	vc4_crtc_send_vblank(crtc);
-	msleep(30);
 }
 
 static void vc4_crtc_atomic_enable(struct drm_crtc *crtc,
