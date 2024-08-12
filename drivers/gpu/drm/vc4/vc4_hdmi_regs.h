@@ -689,6 +689,7 @@ static inline u32 vc4_hdmi_read(struct vc4_hdmi *hdmi,
 		return 0;
 	}
 
+	mdelay(10);
 	return readl(base + field->offset);
 }
 #define HDMI_READ(reg)		vc4_hdmi_read(vc4_hdmi, reg)
@@ -722,6 +723,7 @@ static inline void vc4_hdmi_write(struct vc4_hdmi *hdmi,
 	}
 
 	writel(value, base + field->offset);
+	mdelay(10);
 }
 #define HDMI_WRITE(reg, val)	vc4_hdmi_write(vc4_hdmi, reg, val)
 
