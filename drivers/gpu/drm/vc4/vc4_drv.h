@@ -1073,7 +1073,7 @@ void vc4_txp_connector_reset(struct drm_connector *connector);
 /* vc4_irq.c */
 void vc4_irq_enable(struct drm_device *dev);
 void vc4_irq_disable(struct drm_device *dev);
-int vc4_irq_install(struct drm_device *dev, int irq);
+int vc4_irq_install(struct drm_device *dev);
 void vc4_irq_uninstall(struct drm_device *dev);
 void vc4_irq_reset(struct drm_device *dev);
 

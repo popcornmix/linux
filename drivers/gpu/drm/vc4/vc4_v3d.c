@@ -480,7 +480,7 @@ static int vc4_v3d_bind(struct device *dev, struct device *master, void *data)
 	V3D_WRITE(V3D_BPOA, 0);
 	V3D_WRITE(V3D_BPOS, 0);
 
-	ret = vc4_irq_install(drm, vc4->irq);
+	ret = vc4_irq_install(drm);
 	if (ret) {
 		drm_err(drm, "Failed to install IRQ handler\n");
 		goto err_put_runtime_pm;
