@@ -172,7 +172,7 @@ static void vc4_v3d_init_hw(struct drm_device *dev)
 	V3D_WRITE(V3D_VPMBASE, 0);
 }
 
-int vc4_v3d_get_bin_slot(struct vc4_dev *vc4)
+int vc4_v3d_get_bin_slot(struct vc4_dev *vc4, uint64_t timeout_ns)
 {
 	struct drm_device *dev = &vc4->base;
 	unsigned long irqflags;
@@ -203,7 +203,7 @@ try_again:
 	spin_unlock_irqrestore(&vc4->job_lock, irqflags);
 
 	if (seqno) {
-		int ret = vc4_wait_for_seqno(dev, seqno, ~0ull, true);
+		int ret = vc4_wait_for_seqno(dev, seqno, timeout_ns, true);
 
 		if (ret == 0)
 			goto try_again;

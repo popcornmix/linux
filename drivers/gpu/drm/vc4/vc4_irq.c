@@ -57,6 +57,8 @@
 			 V3D_INT_FLDONE | \
 			 V3D_INT_FRDONE)
 
+#define VC4_OVERFLOW_SLOT_TIMEOUT_NS	NSEC_PER_SEC
+
 static void
 vc4_overflow_mem_work(struct work_struct *work)
 {
@@ -74,7 +76,7 @@ vc4_overflow_mem_work(struct work_struct *work)
 
 	bo = vc4->bin_bo;
 
-	bin_bo_slot = vc4_v3d_get_bin_slot(vc4);
+	bin_bo_slot = vc4_v3d_get_bin_slot(vc4, VC4_OVERFLOW_SLOT_TIMEOUT_NS);
 	if (bin_bo_slot < 0) {
 		drm_err(&vc4->base, "Couldn't allocate binner overflow mem\n");
 		goto complete;
