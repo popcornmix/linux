@@ -46,6 +46,7 @@
  */
 
 #include <linux/platform_device.h>
+#include <linux/pm_runtime.h>
 
 #include <drm/drm_print.h>
 
@@ -64,6 +65,9 @@ vc4_overflow_mem_work(struct work_struct *work)
 	int bin_bo_slot;
 	struct vc4_exec_info *exec;
 	unsigned long irqflags;
+
+	if (pm_runtime_get_if_active(&vc4->v3d->pdev->dev) <= 0)
+		return;
 
 	mutex_lock(&vc4->bin_bo_lock);
 
@@ -109,6 +113,7 @@ vc4_overflow_mem_work(struct work_struct *work)
 
 complete:
 	mutex_unlock(&vc4->bin_bo_lock);
+	pm_runtime_put_autosuspend(&vc4->v3d->pdev->dev);
 }
 
 static void
