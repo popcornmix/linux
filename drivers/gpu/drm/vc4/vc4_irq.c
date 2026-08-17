@@ -53,10 +53,6 @@
 #include "vc4_regs.h"
 #include "vc4_trace.h"
 
-#define V3D_DRIVER_IRQS (V3D_INT_OUTOMEM | \
-			 V3D_INT_FLDONE | \
-			 V3D_INT_FRDONE)
-
 #define VC4_OVERFLOW_SLOT_TIMEOUT_NS	NSEC_PER_SEC
 
 static void
@@ -247,6 +243,7 @@ void
 vc4_irq_enable(struct drm_device *dev)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
+	u32 mask = V3D_INT_FLDONE | V3D_INT_FRDONE;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
@@ -254,10 +251,18 @@ vc4_irq_enable(struct drm_device *dev)
 	if (!vc4->v3d)
 		return;
 
-	/* Enable the render done interrupts. The out-of-memory interrupt is
-	 * enabled as soon as we have a binner BO allocated.
+	/* Arming the OOM interrupt before there is a binner BO would raise an
+	 * interrupt nothing can clear.
 	 */
-	V3D_WRITE(V3D_INTENA, V3D_INT_FLDONE | V3D_INT_FRDONE);
+	if (vc4->bin_bo)
+		mask |= V3D_INT_OUTOMEM;
+
+	/* Clear any pending interrupts someone might have left around for us. */
+	V3D_WRITE(V3D_INTCTL, mask);
+
+	/* Enable our set of interrupts, masking out any others. */
+	V3D_WRITE(V3D_INTDIS, ~mask);
+	V3D_WRITE(V3D_INTENA, mask);
 }
 
 void
@@ -272,13 +277,13 @@ vc4_irq_disable(struct drm_device *dev)
 		return;
 
 	/* Disable sending interrupts for our driver's IRQs. */
-	V3D_WRITE(V3D_INTDIS, V3D_DRIVER_IRQS);
-
-	/* Clear any pending interrupts we might have left. */
-	V3D_WRITE(V3D_INTCTL, V3D_DRIVER_IRQS);
+	V3D_WRITE(V3D_INTDIS, ~0);
 
 	/* Finish any interrupt handler still in flight. */
 	synchronize_irq(vc4->irq);
+
+	/* Clear any pending interrupts we might have left. */
+	V3D_WRITE(V3D_INTCTL, ~0);
 
 	cancel_work_sync(&vc4->overflow_mem_work);
 }
@@ -296,11 +301,6 @@ int vc4_irq_install(struct drm_device *dev)
 
 	init_waitqueue_head(&vc4->job_wait_queue);
 	INIT_WORK(&vc4->overflow_mem_work, vc4_overflow_mem_work);
-
-	/* Clear any pending interrupts someone might have left around
-	 * for us.
-	 */
-	V3D_WRITE(V3D_INTCTL, V3D_DRIVER_IRQS);
 
 	ret = devm_request_irq(dev->dev, vc4->irq, vc4_irq, 0,
 			       dev_name(dev->dev), dev);
@@ -331,16 +331,7 @@ void vc4_irq_reset(struct drm_device *dev)
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
 
-	/* Acknowledge any stale IRQs. */
-	V3D_WRITE(V3D_INTCTL, V3D_DRIVER_IRQS);
-
-	/*
-	 * Turn all our interrupts on.  Binner out of memory is the
-	 * only one we expect to trigger at this point, since we've
-	 * just come from poweron and haven't supplied any overflow
-	 * memory yet.
-	 */
-	V3D_WRITE(V3D_INTENA, V3D_DRIVER_IRQS);
+	vc4_irq_enable(dev);
 
 	spin_lock_irqsave(&vc4->job_lock, irqflags);
 	vc4_cancel_bin_job(dev);
