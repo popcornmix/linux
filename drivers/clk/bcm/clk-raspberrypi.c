@@ -295,6 +295,7 @@ static int raspberrypi_fw_prepare(struct clk_hw *hw)
 	struct raspberrypi_clk_variant *variant = data->variant;
 	struct raspberrypi_clk *rpi = data->rpi;
 	u32 state = RPI_FIRMWARE_STATE_ENABLE_BIT;
+	unsigned long rate;
 	int ret;
 
 	ret = raspberrypi_clock_property(rpi->firmware, data,
@@ -306,8 +307,19 @@ static int raspberrypi_fw_prepare(struct clk_hw *hw)
 		return ret;
 	}
 
+	/*
+	 * Unprepare parks the clock at its minimum rate behind the clock
+	 * framework's back, so the cached rate no longer matches the
+	 * hardware. Restore the last rate the framework agreed to (or the
+	 * maximum, for maximize clocks) whenever the clock is re-enabled.
+	 */
 	if (variant->maximize)
-		ret = raspberrypi_fw_set_rate(hw, variant->max_rate, 0);
+		rate = variant->max_rate;
+	else
+		rate = clk_hw_get_rate(hw);
+
+	if (rate)
+		ret = raspberrypi_fw_set_rate(hw, rate, 0);
 
 	return ret;
 }
