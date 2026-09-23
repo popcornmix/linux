@@ -466,6 +466,7 @@ struct lan78xx_net {
 
 	struct phylink		*phylink;
 	struct phylink_config	phylink_config;
+	bool			phylink_suspended;
 };
 
 /* use ethtool to change the level for any given device */
@@ -5194,9 +5195,17 @@ static int lan78xx_suspend(struct usb_interface *intf, pm_message_t message)
 			spin_unlock_irq(&dev->txq.lock);
 		}
 
-		rtnl_lock();
-		phylink_suspend(dev->phylink, false);
-		rtnl_unlock();
+		/*
+		 * Runtime resume can run under rtnl (ethtool ops call
+		 * usb_autopm_get_interface), so only stop phylink for
+		 * system sleep where resume is free to take rtnl.
+		 */
+		if (!PMSG_IS_AUTO(message)) {
+			rtnl_lock();
+			phylink_suspend(dev->phylink, false);
+			rtnl_unlock();
+			dev->phylink_suspended = true;
+		}
 
 		/* stop RX */
 		ret = lan78xx_stop_rx_path(dev);
@@ -5370,6 +5379,13 @@ static int lan78xx_resume(struct usb_interface *intf)
 
 		napi_schedule(&dev->napi);
 
+		if (dev->phylink_suspended) {
+			rtnl_lock();
+			phylink_resume(dev->phylink);
+			rtnl_unlock();
+			dev->phylink_suspended = false;
+		}
+
 		if (!timer_pending(&dev->stat_monitor)) {
 			dev->delta = 1;
 			mod_timer(&dev->stat_monitor,
@@ -5425,15 +5441,7 @@ static int lan78xx_reset_resume(struct usb_interface *intf)
 	if (ret < 0)
 		return ret;
 
-	ret = lan78xx_resume(intf);
-	if (ret < 0)
-		return ret;
-
-	rtnl_lock();
-	phylink_resume(dev->phylink);
-	rtnl_unlock();
-
-	return 0;
+	return lan78xx_resume(intf);
 }
 
 static const struct usb_device_id products[] = {
