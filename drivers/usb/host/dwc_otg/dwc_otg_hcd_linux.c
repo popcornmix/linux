@@ -50,6 +50,7 @@
 #include <linux/string.h>
 #include <linux/dma-mapping.h>
 #include <linux/version.h>
+#include <linux/suspend.h>
 #include <asm/io.h>
 #ifdef CONFIG_ARM
 #include <asm/fiq.h>
@@ -126,6 +127,7 @@ extern int hub_control(struct usb_hcd *hcd,
 
 struct wrapper_priv_data {
 	dwc_otg_hcd_t *dwc_otg_hcd;
+	bool port_suspend_skipped;
 };
 
 /** @} */
@@ -1064,7 +1066,25 @@ int hub_status_data(struct usb_hcd *hcd, char *buf)
 int hub_control(struct usb_hcd *hcd,
 		u16 typeReq, u16 wValue, u16 wIndex, char *buf, u16 wLength)
 {
+	struct wrapper_priv_data *p = (struct wrapper_priv_data *)hcd->hcd_priv;
 	int retval;
+
+	/*
+	 * Keep the bus running across system sleep: dwc_otg's port suspend
+	 * stops the PHY clock and doesn't restore lx_state on resume.
+	 * Runtime suspend must stay real: usbcore stops polling a suspended
+	 * hub and relies on remote wakeup to restart it.
+	 */
+	if (wValue == USB_PORT_FEAT_SUSPEND) {
+		if (typeReq == SetPortFeature && pm_suspend_in_progress()) {
+			p->port_suspend_skipped = true;
+			return 0;
+		}
+		if (typeReq == ClearPortFeature && p->port_suspend_skipped) {
+			p->port_suspend_skipped = false;
+			return 0;
+		}
+	}
 
 	retval = dwc_otg_hcd_hub_control(hcd_to_dwc_otg_hcd(hcd),
 					 typeReq, wValue, wIndex, buf, wLength);
