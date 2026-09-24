@@ -87,6 +87,12 @@ vc4_overflow_mem_work(struct work_struct *work)
 
 	spin_lock_irqsave(&vc4->job_lock, irqflags);
 
+	if (vc4->v3d_irq_stopped) {
+		vc4->bin_alloc_used &= ~BIT(bin_bo_slot);
+		spin_unlock_irqrestore(&vc4->job_lock, irqflags);
+		goto complete;
+	}
+
 	if (vc4->bin_alloc_overflow) {
 		/* If we had overflow memory allocated previously,
 		 * then that chunk will free when the current bin job
@@ -302,6 +308,8 @@ void
 vc4_irq_enable(struct drm_device *dev)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
+	u32 mask = V3D_INT_FLDONE | V3D_INT_FRDONE;
+	unsigned long irqflags;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
@@ -309,16 +317,24 @@ vc4_irq_enable(struct drm_device *dev)
 	if (!vc4->v3d)
 		return;
 
-	/* Enable the render done interrupts. The out-of-memory interrupt is
-	 * enabled as soon as we have a binner BO allocated.
+	/*
+	 * vc4_irq_disable() masks the out-of-memory interrupt too, and
+	 * nothing else re-arms it for a binner BO that is still allocated.
 	 */
-	V3D_WRITE(V3D_INTENA, V3D_INT_FLDONE | V3D_INT_FRDONE);
+	if (vc4->bin_bo)
+		mask |= V3D_INT_OUTOMEM;
+
+	spin_lock_irqsave(&vc4->job_lock, irqflags);
+	vc4->v3d_irq_stopped = false;
+	V3D_WRITE(V3D_INTENA, mask);
+	spin_unlock_irqrestore(&vc4->job_lock, irqflags);
 }
 
 void
 vc4_irq_disable(struct drm_device *dev)
 {
 	struct vc4_dev *vc4 = to_vc4_dev(dev);
+	unsigned long irqflags;
 
 	if (WARN_ON_ONCE(vc4->gen > VC4_GEN_4))
 		return;
@@ -326,11 +342,17 @@ vc4_irq_disable(struct drm_device *dev)
 	if (!vc4->v3d)
 		return;
 
-	/* Disable sending interrupts for our driver's IRQs. */
+	/*
+	 * vc4_overflow_mem_work() re-arms V3D_INT_OUTOMEM when it runs, and it
+	 * can be running now, or be queued by a handler still in flight. Mask
+	 * under job_lock with v3d_irq_stopped set, so that whichever way that
+	 * race goes the interrupt ends up disabled.
+	 */
+	spin_lock_irqsave(&vc4->job_lock, irqflags);
+	vc4->v3d_irq_stopped = true;
 	V3D_WRITE(V3D_INTDIS, V3D_DRIVER_IRQS);
-
-	/* Clear any pending interrupts we might have left. */
 	V3D_WRITE(V3D_INTCTL, V3D_DRIVER_IRQS);
+	spin_unlock_irqrestore(&vc4->job_lock, irqflags);
 
 	/* Finish any interrupt handler still in flight. */
 	synchronize_irq(vc4->irq);

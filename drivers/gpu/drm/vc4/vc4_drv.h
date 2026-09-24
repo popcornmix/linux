@@ -216,6 +216,12 @@ struct vc4_dev {
 
 	struct work_struct overflow_mem_work;
 
+	/* Set by vc4_irq_disable() so the overflow work doesn't re-arm
+	 * V3D_INT_OUTOMEM on a block that is being taken down. Protected
+	 * by job_lock.
+	 */
+	bool v3d_irq_stopped;
+
 	int power_refcount;
 
 	/* Set to true when the load tracker is active. */
