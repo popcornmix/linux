@@ -297,6 +297,12 @@ vc4_irq_enable(struct drm_device *dev)
 	/* Enable our set of interrupts, masking out any others. */
 	V3D_WRITE(V3D_INTDIS, ~mask);
 	V3D_WRITE(V3D_INTENA, mask);
+
+	/* Only now let the interrupt be delivered again. */
+	if (vc4->irq_installed && vc4->irq_pm_disabled) {
+		vc4->irq_pm_disabled = false;
+		enable_irq(vc4->irq);
+	}
 }
 
 void
@@ -313,8 +319,21 @@ vc4_irq_disable(struct drm_device *dev)
 	/* Disable sending interrupts for our driver's IRQs. */
 	V3D_WRITE(V3D_INTDIS, ~0);
 
-	/* Finish any interrupt handler still in flight. */
-	synchronize_irq(vc4->irq);
+	/*
+	 * Keep the interrupt from being delivered at all across the power
+	 * transition. synchronize_irq() is not enough on its own: it only
+	 * waits for handlers that have already set IRQD_IRQ_INPROGRESS, so a
+	 * CPU that has latched the hwirq but not yet reached handle_level_irq()
+	 * is invisible to it and will run vc4_irq() after the V3D clock has
+	 * gone, reading 0xdeadbeef back from every register.
+	 *
+	 * disable_irq() waits for in-flight handlers too, so it subsumes the
+	 * synchronize_irq() this replaces.
+	 */
+	if (vc4->irq_installed && !vc4->irq_pm_disabled) {
+		vc4->irq_pm_disabled = true;
+		disable_irq(vc4->irq);
+	}
 
 	/* Clear any pending interrupts we might have left. */
 	V3D_WRITE(V3D_INTCTL, ~0);
@@ -341,6 +360,8 @@ int vc4_irq_install(struct drm_device *dev)
 	if (ret)
 		return ret;
 
+	vc4->irq_installed = true;
+
 	vc4_irq_enable(dev);
 
 	return 0;
@@ -354,6 +375,13 @@ void vc4_irq_uninstall(struct drm_device *dev)
 		return;
 
 	vc4_irq_disable(dev);
+
+	/* Hand the IRQ back balanced for the device-managed free. */
+	if (vc4->irq_pm_disabled) {
+		vc4->irq_pm_disabled = false;
+		enable_irq(vc4->irq);
+	}
+	vc4->irq_installed = false;
 }
 
 /** Reinitializes interrupt registers when a GPU reset is performed. */

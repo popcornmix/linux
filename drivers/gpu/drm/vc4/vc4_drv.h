@@ -95,6 +95,10 @@ struct vc4_dev {
 	enum vc4_gen gen;
 
 	unsigned int irq;
+	/* Set once request_irq() has succeeded. */
+	bool irq_installed;
+	/* Set while the IRQ is masked across a runtime PM transition. */
+	bool irq_pm_disabled;
 
 	bool firmware_kms;
 	struct rpi_firmware *firmware;
