@@ -45,6 +45,7 @@
  * current job can make progress.
  */
 
+#include <linux/moduleparam.h>
 #include <linux/platform_device.h>
 #include <linux/ratelimit.h>
 
@@ -200,6 +201,17 @@ vc4_irq_finish_render_job(struct drm_device *dev)
 	schedule_work(&vc4->job_done_work);
 }
 
+/*
+ * Debug counters, readable in /sys/module/vc4/parameters/. Updated without
+ * locking from every CPU, so treat them as approximate.
+ */
+static unsigned int irq_total;
+module_param(irq_total, uint, 0444);
+static unsigned int irq_nothing_pending;
+module_param(irq_nothing_pending, uint, 0444);
+static unsigned int irq_deadbeef;
+module_param(irq_deadbeef, uint, 0444);
+
 static irqreturn_t
 vc4_irq(int irq, void *arg)
 {
@@ -210,6 +222,12 @@ vc4_irq(int irq, void *arg)
 
 	barrier();
 	intctl = V3D_READ(V3D_INTCTL);
+
+	data_race(irq_total++);
+	if (intctl == 0xdeadbeef)
+		data_race(irq_deadbeef++);
+	else if (!(intctl & V3D_DRIVER_IRQS))
+		data_race(irq_nothing_pending++);
 
 	WARN_ON(intctl == 0xdeadbeef);
 	if (intctl == 0xdeadbeef) {
