@@ -47,6 +47,7 @@
 
 #include <linux/platform_device.h>
 #include <linux/pm_runtime.h>
+#include <linux/ratelimit.h>
 
 #include <drm/drm_print.h>
 
@@ -212,6 +213,34 @@ vc4_irq(int irq, void *arg)
 
 	barrier();
 	intctl = V3D_READ(V3D_INTCTL);
+
+	/*
+	 * Reads return 0xdeadbeef when the V3D power domain is off, so this
+	 * means we were called against a powered-down block. Report it; the
+	 * handling below is left alone so the path stays as it was.
+	 */
+	if (intctl == 0xdeadbeef || intctl == ~0U) {
+		static DEFINE_RATELIMIT_STATE(rs, 5 * HZ, 3);
+		static atomic_t count = ATOMIC_INIT(0);
+		int n = atomic_inc_return(&count);
+
+		if (__ratelimit(&rs)) {
+			static const char * const rpm[] = {
+				"ACTIVE", "RESUMING", "SUSPENDED", "SUSPENDING",
+			};
+			struct device *d = vc4->v3d ? &vc4->v3d->pdev->dev : NULL;
+			enum rpm_status st = d ? d->power.runtime_status : 0;
+
+			pr_err("vc4_irq: SPURIOUS intctl=%08x cpu=%d bin=%s render=%s rpm=%s disable_depth=%d count=%d\n",
+			       intctl, smp_processor_id(),
+			       vc4_first_bin_job(vc4) ? "present" : "NULL",
+			       vc4_first_render_job(vc4) ? "present" : "NULL",
+			       d ? (st < ARRAY_SIZE(rpm) ? rpm[st] : "?") : "?",
+			       d ? d->power.disable_depth : -1,
+			       n);
+		}
+		WARN_ON_ONCE(1);
+	}
 
 	/* Acknowledge the interrupts we're handling here. The binner
 	 * last flush / render frame done interrupt will be cleared,
