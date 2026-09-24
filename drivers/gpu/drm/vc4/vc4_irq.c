@@ -55,6 +55,8 @@
 #include "vc4_regs.h"
 #include "vc4_trace.h"
 
+static unsigned int ovf_work_runs;
+
 #define V3D_DRIVER_IRQS (V3D_INT_OUTOMEM | \
 			 V3D_INT_FLDONE | \
 			 V3D_INT_FRDONE)
@@ -69,6 +71,7 @@ vc4_overflow_mem_work(struct work_struct *work)
 	struct vc4_exec_info *exec;
 	unsigned long irqflags;
 
+	data_race(ovf_work_runs++);
 	mutex_lock(&vc4->bin_bo_lock);
 
 	if (!vc4->bin_bo)
@@ -211,6 +214,9 @@ static unsigned int irq_nothing_pending;
 module_param(irq_nothing_pending, uint, 0444);
 static unsigned int irq_deadbeef;
 module_param(irq_deadbeef, uint, 0444);
+static unsigned int irq_outomem;
+module_param(irq_outomem, uint, 0444);
+module_param(ovf_work_runs, uint, 0444);
 
 static irqreturn_t
 vc4_irq(int irq, void *arg)
@@ -224,6 +230,8 @@ vc4_irq(int irq, void *arg)
 	intctl = V3D_READ(V3D_INTCTL);
 
 	data_race(irq_total++);
+	if (intctl != 0xdeadbeef && (intctl & V3D_INT_OUTOMEM))
+		data_race(irq_outomem++);
 	if (intctl == 0xdeadbeef)
 		data_race(irq_deadbeef++);
 	else if (!(intctl & V3D_DRIVER_IRQS))

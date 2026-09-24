@@ -8,7 +8,9 @@
 #include <linux/clk.h>
 #include <linux/component.h>
 #include <linux/platform_device.h>
+#include <linux/moduleparam.h>
 #include <linux/pm_runtime.h>
+#include <linux/workqueue.h>
 
 #include "vc4_drv.h"
 #include "vc4_regs.h"
@@ -369,12 +371,40 @@ void vc4_v3d_bin_bo_put(struct vc4_dev *vc4)
 }
 
 #ifdef CONFIG_PM
+/* Debug counters, readable in /sys/module/vc4/parameters/. */
+static unsigned int rpm_suspends;
+module_param(rpm_suspends, uint, 0444);
+static unsigned int rpm_susp_work_busy;
+module_param(rpm_susp_work_busy, uint, 0444);
+static unsigned int rpm_susp_intena;
+module_param(rpm_susp_intena, uint, 0444);
+static unsigned int rpm_susp_intctl;
+module_param(rpm_susp_intctl, uint, 0444);
+
 static int vc4_v3d_runtime_suspend(struct device *dev)
 {
 	struct vc4_v3d *v3d = dev_get_drvdata(dev);
 	struct vc4_dev *vc4 = v3d->vc4;
 
+	unsigned int work = work_busy(&vc4->overflow_mem_work);
+	u32 ena, ctl;
+
+	data_race(rpm_suspends++);
+	if (work)
+		data_race(rpm_susp_work_busy++);
+
 	vc4_irq_disable(&vc4->base);
+
+	/* Both should be clear once vc4_irq_disable() has returned. */
+	ena = V3D_READ(V3D_INTENA);
+	ctl = V3D_READ(V3D_INTCTL);
+	if (ena)
+		data_race(rpm_susp_intena++);
+	if (ctl & (V3D_INT_OUTOMEM | V3D_INT_FLDONE | V3D_INT_FRDONE))
+		data_race(rpm_susp_intctl++);
+	if (ena || work)
+		pr_err_ratelimited("vc4_v3d: suspend with intena=%08x intctl=%08x work_busy=%x\n",
+				   ena, ctl, work);
 
 	/* we no longer require a minimum clock rate */
 	clk_set_min_rate(v3d->clk, 0);
