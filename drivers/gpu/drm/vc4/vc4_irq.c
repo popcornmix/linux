@@ -46,6 +46,7 @@
  */
 
 #include <linux/platform_device.h>
+#include <linux/ratelimit.h>
 
 #include <drm/drm_drv.h>
 
@@ -209,6 +210,19 @@ vc4_irq(int irq, void *arg)
 
 	barrier();
 	intctl = V3D_READ(V3D_INTCTL);
+
+	WARN_ON(intctl == 0xdeadbeef);
+	if (intctl == 0xdeadbeef) {
+		static DEFINE_RATELIMIT_STATE(rs, 5 * HZ, 3);
+		static const char * const rpm[] = {
+			"ACTIVE", "RESUMING", "SUSPENDED", "SUSPENDING",
+		};
+		struct device *d = vc4->v3d ? &vc4->v3d->pdev->dev : NULL;
+
+		if (d && __ratelimit(&rs))
+			pr_err("vc4_irq: SPURIOUS intctl=%08x cpu=%d rpm=%s\n", intctl,
+			       smp_processor_id(), rpm[d->power.runtime_status & 3]);
+	}
 
 	/* Acknowledge the interrupts we're handling here. The binner
 	 * last flush / render frame done interrupt will be cleared,
