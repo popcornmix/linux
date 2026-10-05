@@ -3412,17 +3412,27 @@ static int rpi_axi_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
  */
 static bool rpi_axi_pmu_vpu_accessible(struct rpi_axi_pmu *pmu)
 {
-	u32 tmp[3] = { pmu->monitor[MON_VPU].mailbox + GEN_CTRL, 1, 0 };
-	int err;
+	u32 addr = pmu->monitor[MON_VPU].mailbox + GEN_CTRL;
+	u32 tmp[3] = { addr, 1, GEN_CTL_ENABLE_BIT };
+	bool ok;
 
-	mutex_lock(&pmu->vpu_mutex);
-	set_monitor_control(pmu, MON_VPU, GEN_CTL_ENABLE_BIT);
-	err = rpi_firmware_property(pmu->firmware, RPI_FIRMWARE_GET_PERIPH_REG,
-				    tmp, sizeof(tmp));
-	set_monitor_control(pmu, MON_VPU, 0);
-	mutex_unlock(&pmu->vpu_mutex);
+	if (rpi_firmware_property(pmu->firmware, RPI_FIRMWARE_SET_PERIPH_REG,
+				  tmp, sizeof(tmp)) || tmp[1] != 1)
+		return false;
 
-	return !err && tmp[1] == 1 && (tmp[2] & GEN_CTL_ENABLE_BIT);
+	tmp[0] = addr;
+	tmp[1] = 1;
+	tmp[2] = 0;
+	ok = !rpi_firmware_property(pmu->firmware, RPI_FIRMWARE_GET_PERIPH_REG,
+				    tmp, sizeof(tmp)) &&
+	     tmp[1] == 1 && (tmp[2] & GEN_CTL_ENABLE_BIT);
+
+	tmp[0] = addr;
+	tmp[1] = 1;
+	tmp[2] = 0;
+	rpi_firmware_property(pmu->firmware, RPI_FIRMWARE_SET_PERIPH_REG, tmp, sizeof(tmp));
+
+	return ok;
 }
 
 /**
