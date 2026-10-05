@@ -24,9 +24,9 @@
  * Synchronization & Concurrency Model:
  * ------------------------------------
  * - Spinlock (pmu->lock):
- *   Protects active event array (events[]), event generation sequence counters (event_gen[]),
+ *   Protects active event array (events[]),
  *   bus watcher allocation/refcounting, active_vpu_events counter, and MMIO register updates
- *   (MON_SYSTEM) against SMP race conditions and ABA pointer recycling races.
+ *   (MON_SYSTEM) against SMP race conditions.
  *
  * - Mutex (pmu->vpu_mutex):
  *   Serializes VideoCore Mailbox IPC transactions (MON_VPU) in process context,
@@ -690,6 +690,7 @@ static bool config_is_valid(struct rpi_axi_pmu *pmu, __u64 config);
  * @enabled: Hardware enabled status for each watcher
  * @monitor_running: Flag indicating if the hardware monitor loop is globally active
  * @vpu_disable_pending: Array tracking asynchronous hardware disable requests for VPU
+ * @config_gen: Bumped whenever a watcher is allocated or freed
  */
 struct rpi_axi_hw_events {
 	int monitored_bus[NUM_BUS_WATCHERS_PER_MONITOR];
@@ -699,6 +700,7 @@ struct rpi_axi_hw_events {
 	bool monitor_running;
 	bool enabled[NUM_BUS_WATCHERS_PER_MONITOR];
 	bool vpu_disable_pending[NUM_BUS_WATCHERS_PER_MONITOR];
+	unsigned int config_gen[NUM_BUS_WATCHERS_PER_MONITOR];
 };
 
 /**
@@ -715,6 +717,7 @@ static void rpi_axi_hw_events__init(struct rpi_axi_hw_events *hw_events)
 		hw_events->refcount[i] = 0;
 		hw_events->enabled[i] = false;
 		hw_events->vpu_disable_pending[i] = false;
+		hw_events->config_gen[i] = 0;
 	}
 }
 
@@ -745,6 +748,7 @@ static int rpi_axi_hw_events__get_alloc_event_idx(struct rpi_axi_hw_events *hw_e
 			hw_events->filter[i] = filter;
 			hw_events->refcount[i] = 1;
 			hw_events->vpu_disable_pending[i] = false;
+			hw_events->config_gen[i]++;
 			hw_events->num_monitored++;
 			return i;
 		}
@@ -771,7 +775,6 @@ static int rpi_axi_hw_events__get_alloc_event_idx(struct rpi_axi_hw_events *hw_e
  * @active_events: Count of active perf_events currently monitored
  * @active_vpu_events: Count of active VPU perf_events currently monitored
  * @events: Array of active perf_event pointers
- * @event_gen: Per-slot generation sequence counters to prevent ABA pointer recycling races
  * @monitor: Per-monitor state array (System and VPU)
  */
 struct rpi_axi_pmu {
@@ -789,7 +792,6 @@ struct rpi_axi_pmu {
 	int			active_events;
 	int			active_vpu_events;
 	struct perf_event	*events[RPI_AXI_MAX_EVENTS];
-	u64			event_gen[RPI_AXI_MAX_EVENTS];
 	struct {
 		struct rpi_axi_hw_events hw_events;
 		bool use_mailbox_interface;
@@ -2969,33 +2971,30 @@ static u32 rpi_axi_pmu_read_counter(struct rpi_axi_pmu *pmu, enum monitor mon, i
 	/* Use READ_ONCE to prevent KCSAN data race warnings during lockless IPC reads */
 	if (!READ_ONCE(pmu->monitor[mon].hw_events.enabled[idx]))
 		return 0;
-	if (pmu->monitor[mon].use_mailbox_interface) {
-		u32 tmp[3] = {
-			pmu->monitor[mon].mailbox + watcher + offset,
-			1, -1
-		};
-		int err;
-
-		might_sleep();
-		lockdep_assert_held(&pmu->vpu_mutex);
-		if (WARN_ON_ONCE(in_interrupt() || irqs_disabled()))
-			return -1;
-		err = rpi_firmware_property(pmu->firmware,
-					    RPI_FIRMWARE_GET_PERIPH_REG,
-					    tmp, sizeof(tmp));
-		if (err < 0 || tmp[1] != 1) {
-			dev_err_ratelimited(&pmu->pdev->dev, "Failed to read bus watcher\n");
-			/* Return U32_MAX on IPC failure. */
-			return U32_MAX;
-		}
-		ret = tmp[2];
-	} else {
-		void __iomem *addr = pmu->monitor[mon].base_address + watcher + offset;
-
-		lockdep_assert_held(&pmu->lock);
-		ret = readl(addr);
-	}
+	lockdep_assert_held(&pmu->lock);
+	ret = readl(pmu->monitor[mon].base_address + watcher + offset);
 	return ret;
+}
+
+/* All three VPU bus watchers, from BW0_CTRL to BW2_RATRANS, in one mailbox call */
+#define VPU_READ_WORDS	((BW2_CTRL + BW_RATRANS_OFFSET - BW0_CTRL) / 4 + 1)
+
+static int rpi_axi_pmu_vpu_read_watchers(struct rpi_axi_pmu *pmu, u32 *regs)
+{
+	u32 tmp[2 + VPU_READ_WORDS] = {
+		pmu->monitor[MON_VPU].mailbox + BW0_CTRL, VPU_READ_WORDS
+	};
+	int err;
+
+	lockdep_assert_held(&pmu->vpu_mutex);
+	err = rpi_firmware_property(pmu->firmware, RPI_FIRMWARE_GET_PERIPH_REG,
+				    tmp, sizeof(tmp));
+	if (err || tmp[1] != VPU_READ_WORDS) {
+		dev_err_ratelimited(&pmu->pdev->dev, "Failed to read bus watchers\n");
+		return -EIO;
+	}
+	memcpy(regs, &tmp[2], VPU_READ_WORDS * sizeof(u32));
+	return 0;
 }
 
 /**
@@ -3042,84 +3041,71 @@ static void rpi_axi_pmu_read(struct perf_event *event)
  * rpi_axi_pmu_vpu_work_handler() - Background work handler for VPU monitor counter reads
  * @work: Pointer to work_struct inside struct rpi_axi_pmu
  *
- * Runs in kernel process context where sleeping is allowed. Reads fresh VPU counter values over
- * VideoCore Mailbox IPC under vpu_mutex and updates the cached perf event count safely.
- * ABA pointer recycling races are prevented by validating per-slot sequence counters (event_gen).
- * Multiplexing counter rotation baselines are established using the PERF_HES_UPTODATE flag.
+ * Runs in process context under vpu_mutex. Programs newly allocated VPU bus
+ * watchers, then reads all of them in a single mailbox call and updates the
+ * VPU events. A watcher reassigned while the lock was dropped is detected by
+ * its config_gen and skipped. A newly started event takes its first read as
+ * its baseline (PERF_HES_UPTODATE).
  */
 static void rpi_axi_pmu_vpu_work_handler(struct work_struct *work)
 {
 	struct rpi_axi_pmu *pmu = container_of(work, struct rpi_axi_pmu, vpu_work);
+	struct rpi_axi_hw_events *hw = &pmu->monitor[MON_VPU].hw_events;
+	unsigned int gen[NUM_BUS_WATCHERS_PER_MONITOR];
+	bool valid[NUM_BUS_WATCHERS_PER_MONITOR];
+	u32 regs[VPU_READ_WORDS];
+	bool any = false;
 
 	might_sleep();
 	mutex_lock(&pmu->vpu_mutex);
 	raw_spin_lock_irq(&pmu->lock);
 	for (int idx = 0; idx < NUM_BUS_WATCHERS_PER_MONITOR; idx++) {
-		if (pmu->monitor[MON_VPU].hw_events.vpu_disable_pending[idx]) {
-			pmu->monitor[MON_VPU].hw_events.vpu_disable_pending[idx] = false;
-			if (pmu->monitor[MON_VPU].use_mailbox_interface) {
-				raw_spin_unlock_irq(&pmu->lock);
-				rpi_axi_pmu_disable_bus_watcher(pmu, MON_VPU, idx);
-				raw_spin_lock_irq(&pmu->lock);
-			} else {
-				rpi_axi_pmu_disable_bus_watcher(pmu, MON_VPU, idx);
-			}
+		if (hw->vpu_disable_pending[idx]) {
+			hw->vpu_disable_pending[idx] = false;
+			raw_spin_unlock_irq(&pmu->lock);
+			rpi_axi_pmu_disable_bus_watcher(pmu, MON_VPU, idx);
+			raw_spin_lock_irq(&pmu->lock);
 		}
+		if (hw->monitored_bus[idx] >= 0 && !hw->enabled[idx]) {
+			int bus = hw->monitored_bus[idx];
+			int filter = hw->filter[idx];
+			unsigned int g = hw->config_gen[idx];
+
+			raw_spin_unlock_irq(&pmu->lock);
+			rpi_axi_pmu_enable_bus_watcher(pmu, MON_VPU, idx, bus, filter);
+			raw_spin_lock_irq(&pmu->lock);
+			hw->monitor_running = true;
+			/* Leave it disabled if the watcher was reassigned meanwhile */
+			if (hw->config_gen[idx] == g)
+				WRITE_ONCE(hw->enabled[idx], true);
+		}
+		gen[idx] = hw->config_gen[idx];
+		valid[idx] = hw->enabled[idx];
+		any |= valid[idx];
 	}
 
-	for (int i = 0; i < RPI_AXI_MAX_EVENTS; i++) {
-		struct perf_event *event = pmu->events[i];
-		enum counter counter;
-		u64 gen;
-		int idx;
-		u64 new_count;
+	if (any) {
+		int err;
 
-		if (!event || (event->hw.state & PERF_HES_STOPPED) ||
-		    config_to_monitor(event->attr.config) != MON_VPU)
-			continue;
-		gen = pmu->event_gen[i];
-		counter = config_to_counter(event->attr.config);
-		idx = event->hw.idx;
-		/* If VPU bus watcher is not enabled on hardware, enable it in process context */
-		if (!pmu->monitor[MON_VPU].hw_events.enabled[idx]) {
-			int bus = pmu->monitor[MON_VPU].hw_events.monitored_bus[idx];
-			int filter = pmu->monitor[MON_VPU].hw_events.filter[idx];
+		raw_spin_unlock_irq(&pmu->lock);
+		err = rpi_axi_pmu_vpu_read_watchers(pmu, regs);
+		raw_spin_lock_irq(&pmu->lock);
 
-			if (pmu->monitor[MON_VPU].use_mailbox_interface) {
-				raw_spin_unlock_irq(&pmu->lock);
-				rpi_axi_pmu_enable_bus_watcher(pmu, MON_VPU, idx, bus, filter);
-				raw_spin_lock_irq(&pmu->lock);
-			} else {
-				rpi_axi_pmu_enable_bus_watcher(pmu, MON_VPU, idx, bus, filter);
-			}
-			pmu->monitor[MON_VPU].hw_events.monitor_running = true;
-		}
+		for (int i = 0; !err && i < RPI_AXI_MAX_EVENTS; i++) {
+			struct perf_event *event = pmu->events[i];
+			enum counter counter;
+			int idx;
+			u32 new_count;
 
-		/* Drop spinlock during Mailbox IPC read only if using mailbox interface */
-		if (pmu->monitor[MON_VPU].use_mailbox_interface) {
-			raw_spin_unlock_irq(&pmu->lock);
-			new_count = rpi_axi_pmu_read_counter(pmu, MON_VPU, idx, counter);
-			raw_spin_lock_irq(&pmu->lock);
-		} else {
-			new_count = rpi_axi_pmu_read_counter(pmu, MON_VPU, idx, counter);
-		}
-
-		/*
-		 * U32_MAX indicates a hardware or IPC read failure. Ignore the update
-		 * to prevent spurious artificial counter spikes from underflows.
-		 */
-		if (new_count == U32_MAX)
-			continue;
-		/*
-		 * Verify event pointer and generation sequence counter match
-		 * (ABA pointer recycling race prevention).
-		 */
-		if (pmu->events[i] == event &&
-		    pmu->event_gen[i] == gen &&
-		    !(event->hw.state & PERF_HES_STOPPED)) {
-			WRITE_ONCE(pmu->monitor[MON_VPU].hw_events.enabled[idx], true);
+			if (!event || (event->hw.state & PERF_HES_STOPPED) ||
+			    config_to_monitor(event->attr.config) != MON_VPU)
+				continue;
+			idx = event->hw.idx;
+			if (idx < 0 || !valid[idx] || hw->config_gen[idx] != gen[idx])
+				continue;
+			counter = config_to_counter(event->attr.config);
+			new_count = regs[(watcher_offset(idx) + counter_offset(counter) - BW0_CTRL) / 4];
 			if (!(event->hw.state & PERF_HES_UPTODATE)) {
-				/* Initial baseline read for newly started/rotated VPU event */
 				local64_set(&event->hw.prev_count, new_count);
 				event->hw.state |= PERF_HES_UPTODATE;
 			} else {
@@ -3128,16 +3114,11 @@ static void rpi_axi_pmu_vpu_work_handler(struct work_struct *work)
 		}
 	}
 
-	if (pmu->monitor[MON_VPU].hw_events.num_monitored == 0 &&
-	    pmu->monitor[MON_VPU].hw_events.monitor_running) {
-		if (pmu->monitor[MON_VPU].use_mailbox_interface) {
-			raw_spin_unlock_irq(&pmu->lock);
-			set_monitor_control(pmu, MON_VPU, GEN_CTL_RESET_BIT);
-			raw_spin_lock_irq(&pmu->lock);
-		} else {
-			set_monitor_control(pmu, MON_VPU, GEN_CTL_RESET_BIT);
-		}
-		pmu->monitor[MON_VPU].hw_events.monitor_running = false;
+	if (hw->num_monitored == 0 && hw->monitor_running) {
+		raw_spin_unlock_irq(&pmu->lock);
+		set_monitor_control(pmu, MON_VPU, GEN_CTL_RESET_BIT);
+		raw_spin_lock_irq(&pmu->lock);
+		hw->monitor_running = false;
 	}
 
 	raw_spin_unlock_irq(&pmu->lock);
@@ -3253,7 +3234,6 @@ static int rpi_axi_pmu_add(struct perf_event *event, int flags)
 		if (!pmu->events[i]) {
 			slot = i;
 			pmu->events[i] = event;
-			pmu->event_gen[i]++;
 			break;
 		}
 	}
@@ -3263,6 +3243,7 @@ static int rpi_axi_pmu_add(struct perf_event *event, int flags)
 		if (hw_events->refcount[idx] == 0) {
 			hw_events->monitored_bus[idx] = -1;
 			hw_events->filter[idx] = 0;
+			hw_events->config_gen[idx]++;
 			hw_events->num_monitored--;
 			if (pmu->monitor[mon].use_mailbox_interface) {
 				hw_events->vpu_disable_pending[idx] = true;
@@ -3333,7 +3314,6 @@ static void rpi_axi_pmu_del(struct perf_event *event, int flags)
 	for (int i = 0; i < RPI_AXI_MAX_EVENTS; i++) {
 		if (pmu->events[i] == event) {
 			pmu->events[i] = NULL;
-			pmu->event_gen[i]++;
 			break;
 		}
 	}
@@ -3343,6 +3323,7 @@ static void rpi_axi_pmu_del(struct perf_event *event, int flags)
 		if (pmu->monitor[mon].hw_events.refcount[idx] == 0) {
 			pmu->monitor[mon].hw_events.monitored_bus[idx] = -1;
 			pmu->monitor[mon].hw_events.filter[idx] = 0;
+			pmu->monitor[mon].hw_events.config_gen[idx]++;
 			pmu->monitor[mon].hw_events.num_monitored--;
 			if (!pmu->monitor[mon].use_mailbox_interface) {
 				WRITE_ONCE(pmu->monitor[mon].hw_events.enabled[idx], false);
