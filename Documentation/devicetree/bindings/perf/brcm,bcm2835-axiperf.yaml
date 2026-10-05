@@ -17,10 +17,8 @@ description: |
   The primary monitor evaluates the System fabric, while the secondary monitor
   evaluates the VideoCore VPU hardware.
 
-  Older silicon generally restricts direct MMIO access to the VPU endpoints,
-  requiring them to be accessed over the Raspberry Pi firmware mailbox
-  interface. If the VPU endpoints are memory-mapped, they are supplied as
-  secondary resources.
+  The VPU monitor is not accessible from the ARM, so it is accessed through
+  the Raspberry Pi firmware mailbox using its VideoCore bus address.
 
 properties:
   compatible:
@@ -30,30 +28,18 @@ properties:
       - brcm,bcm2712-axiperf
 
   reg:
-    minItems: 1
     items:
-      - description: System monitor MMIO surface
-      - description: VPU monitor MMIO surface
-    description: |
-      Memory-mapped I/O resource regions for the AXI PMU endpoints.
-      Typically ordered as System monitor, followed by VPU monitor if directly
-      mapped.
+      - description: System monitor registers
+      - description: VPU monitor registers, passed to the firmware mailbox
+
+  firmware:
+    $ref: /schemas/types.yaml#/definitions/phandle
+    description: Phandle to the Raspberry Pi firmware node
 
 required:
   - compatible
   - reg
-
-allOf:
-  - if:
-      properties:
-        compatible:
-          contains:
-            enum:
-              - brcm,bcm2712-axiperf
-    then:
-      properties:
-        reg:
-          maxItems: 1
+  - firmware
 
 additionalProperties: false
 
@@ -63,9 +49,12 @@ examples:
         compatible = "brcm,bcm2835-axiperf";
         reg = <0x7e009800 0x100>,
               <0x7ee08000 0x100>;
+        firmware = <&firmware>;
     };
   - |
     pmu@7c012800 {
         compatible = "brcm,bcm2712-axiperf";
-        reg = <0x7c012800 0x100>;
+        reg = <0x7c012800 0x100>,
+              <0x7ee00000 0x100>;
+        firmware = <&firmware>;
     };
