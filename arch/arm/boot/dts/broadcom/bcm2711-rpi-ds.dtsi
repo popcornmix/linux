@@ -538,6 +538,8 @@ i2c_vc: &i2c0 {};
 
 &axiperf {
 	compatible = "brcm,bcm2711-axiperf";
+	reg = <0x7e009800 0x100>,
+	      <0x7ee00000 0x100>;
 };
 
 /delete-node/ &v3d;
