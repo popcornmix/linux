@@ -585,9 +585,9 @@ enum bcm2712_filter {
 #define BW_CTRL_LIMIT_HALT_BIT		BIT(28)
 
 #define BW_CTRL_BUS_WATCH_SHIFT		0
-#define BW_CTRL_BUS_WATCH_MASK		GENMASK(5, 0)
+#define BW_CTRL_BUS_WATCH_MASK		GENMASK(4, 0)
 #define BW_CTRL_BUS_FILTER_SHIFT	8
-#define BW_CTRL_BUS_FILTER_MASK		GENMASK(13, 8)
+#define BW_CTRL_BUS_FILTER_MASK		GENMASK(12, 8)
 
 /*
  * RPI_AXI_PMU_TIMER_INTERVAL determines the background polling frequency
@@ -815,6 +815,10 @@ static bool config_is_valid(struct rpi_axi_pmu *pmu, __u64 config)
 	if (filter >= 64)
 		return false;
 
+	if (counter == CNT_RATRANS &&
+	    (pmu->chip == CHIP_BCM2835 || pmu->chip == CHIP_BCM2711))
+		return false;
+
 	switch (pmu->chip) {
 	case CHIP_BCM2835:
 		if (mon == MON_SYSTEM && bus >= BCM2835_SB_MAX)
@@ -855,7 +859,6 @@ PMU_EVENT_ATTR_STRING(dma_l2_rwait, bcm2835_dma_l2_rwait, "monitor=0,bus=0,count
 PMU_EVENT_ATTR_STRING(dma_l2_rtrans, bcm2835_dma_l2_rtrans, "monitor=0,bus=0,counter=7");
 PMU_EVENT_ATTR_STRING(dma_l2_rmax, bcm2835_dma_l2_rmax, "monitor=0,bus=0,counter=8");
 PMU_EVENT_ATTR_STRING(dma_l2_rpend, bcm2835_dma_l2_rpend, "monitor=0,bus=0,counter=9");
-PMU_EVENT_ATTR_STRING(dma_l2_ratrans, bcm2835_dma_l2_ratrans, "monitor=0,bus=0,counter=10");
 PMU_EVENT_ATTR_STRING(trans_atwait, bcm2835_trans_atwait, "monitor=0,bus=1,counter=0");
 PMU_EVENT_ATTR_STRING(trans_atrans, bcm2835_trans_atrans, "monitor=0,bus=1,counter=1");
 PMU_EVENT_ATTR_STRING(trans_amax, bcm2835_trans_amax, "monitor=0,bus=1,counter=2");
@@ -866,7 +869,6 @@ PMU_EVENT_ATTR_STRING(trans_rwait, bcm2835_trans_rwait, "monitor=0,bus=1,counter
 PMU_EVENT_ATTR_STRING(trans_rtrans, bcm2835_trans_rtrans, "monitor=0,bus=1,counter=7");
 PMU_EVENT_ATTR_STRING(trans_rmax, bcm2835_trans_rmax, "monitor=0,bus=1,counter=8");
 PMU_EVENT_ATTR_STRING(trans_rpend, bcm2835_trans_rpend, "monitor=0,bus=1,counter=9");
-PMU_EVENT_ATTR_STRING(trans_ratrans, bcm2835_trans_ratrans, "monitor=0,bus=1,counter=10");
 PMU_EVENT_ATTR_STRING(jpeg_atwait, bcm2835_jpeg_atwait, "monitor=0,bus=2,counter=0");
 PMU_EVENT_ATTR_STRING(jpeg_atrans, bcm2835_jpeg_atrans, "monitor=0,bus=2,counter=1");
 PMU_EVENT_ATTR_STRING(jpeg_amax, bcm2835_jpeg_amax, "monitor=0,bus=2,counter=2");
@@ -877,7 +879,6 @@ PMU_EVENT_ATTR_STRING(jpeg_rwait, bcm2835_jpeg_rwait, "monitor=0,bus=2,counter=6
 PMU_EVENT_ATTR_STRING(jpeg_rtrans, bcm2835_jpeg_rtrans, "monitor=0,bus=2,counter=7");
 PMU_EVENT_ATTR_STRING(jpeg_rmax, bcm2835_jpeg_rmax, "monitor=0,bus=2,counter=8");
 PMU_EVENT_ATTR_STRING(jpeg_rpend, bcm2835_jpeg_rpend, "monitor=0,bus=2,counter=9");
-PMU_EVENT_ATTR_STRING(jpeg_ratrans, bcm2835_jpeg_ratrans, "monitor=0,bus=2,counter=10");
 PMU_EVENT_ATTR_STRING(system_uc_atwait, bcm2835_system_uc_atwait, "monitor=0,bus=3,counter=0");
 PMU_EVENT_ATTR_STRING(system_uc_atrans, bcm2835_system_uc_atrans, "monitor=0,bus=3,counter=1");
 PMU_EVENT_ATTR_STRING(system_uc_amax, bcm2835_system_uc_amax, "monitor=0,bus=3,counter=2");
@@ -888,7 +889,6 @@ PMU_EVENT_ATTR_STRING(system_uc_rwait, bcm2835_system_uc_rwait, "monitor=0,bus=3
 PMU_EVENT_ATTR_STRING(system_uc_rtrans, bcm2835_system_uc_rtrans, "monitor=0,bus=3,counter=7");
 PMU_EVENT_ATTR_STRING(system_uc_rmax, bcm2835_system_uc_rmax, "monitor=0,bus=3,counter=8");
 PMU_EVENT_ATTR_STRING(system_uc_rpend, bcm2835_system_uc_rpend, "monitor=0,bus=3,counter=9");
-PMU_EVENT_ATTR_STRING(system_uc_ratrans, bcm2835_system_uc_ratrans, "monitor=0,bus=3,counter=10");
 PMU_EVENT_ATTR_STRING(dma_uc_atwait, bcm2835_dma_uc_atwait, "monitor=0,bus=4,counter=0");
 PMU_EVENT_ATTR_STRING(dma_uc_atrans, bcm2835_dma_uc_atrans, "monitor=0,bus=4,counter=1");
 PMU_EVENT_ATTR_STRING(dma_uc_amax, bcm2835_dma_uc_amax, "monitor=0,bus=4,counter=2");
@@ -899,7 +899,6 @@ PMU_EVENT_ATTR_STRING(dma_uc_rwait, bcm2835_dma_uc_rwait, "monitor=0,bus=4,count
 PMU_EVENT_ATTR_STRING(dma_uc_rtrans, bcm2835_dma_uc_rtrans, "monitor=0,bus=4,counter=7");
 PMU_EVENT_ATTR_STRING(dma_uc_rmax, bcm2835_dma_uc_rmax, "monitor=0,bus=4,counter=8");
 PMU_EVENT_ATTR_STRING(dma_uc_rpend, bcm2835_dma_uc_rpend, "monitor=0,bus=4,counter=9");
-PMU_EVENT_ATTR_STRING(dma_uc_ratrans, bcm2835_dma_uc_ratrans, "monitor=0,bus=4,counter=10");
 PMU_EVENT_ATTR_STRING(system_l2_atwait, bcm2835_system_l2_atwait, "monitor=0,bus=5,counter=0");
 PMU_EVENT_ATTR_STRING(system_l2_atrans, bcm2835_system_l2_atrans, "monitor=0,bus=5,counter=1");
 PMU_EVENT_ATTR_STRING(system_l2_amax, bcm2835_system_l2_amax, "monitor=0,bus=5,counter=2");
@@ -910,7 +909,6 @@ PMU_EVENT_ATTR_STRING(system_l2_rwait, bcm2835_system_l2_rwait, "monitor=0,bus=5
 PMU_EVENT_ATTR_STRING(system_l2_rtrans, bcm2835_system_l2_rtrans, "monitor=0,bus=5,counter=7");
 PMU_EVENT_ATTR_STRING(system_l2_rmax, bcm2835_system_l2_rmax, "monitor=0,bus=5,counter=8");
 PMU_EVENT_ATTR_STRING(system_l2_rpend, bcm2835_system_l2_rpend, "monitor=0,bus=5,counter=9");
-PMU_EVENT_ATTR_STRING(system_l2_ratrans, bcm2835_system_l2_ratrans, "monitor=0,bus=5,counter=10");
 PMU_EVENT_ATTR_STRING(ccp2tx_atwait, bcm2835_ccp2tx_atwait, "monitor=0,bus=6,counter=0");
 PMU_EVENT_ATTR_STRING(ccp2tx_atrans, bcm2835_ccp2tx_atrans, "monitor=0,bus=6,counter=1");
 PMU_EVENT_ATTR_STRING(ccp2tx_amax, bcm2835_ccp2tx_amax, "monitor=0,bus=6,counter=2");
@@ -921,7 +919,6 @@ PMU_EVENT_ATTR_STRING(ccp2tx_rwait, bcm2835_ccp2tx_rwait, "monitor=0,bus=6,count
 PMU_EVENT_ATTR_STRING(ccp2tx_rtrans, bcm2835_ccp2tx_rtrans, "monitor=0,bus=6,counter=7");
 PMU_EVENT_ATTR_STRING(ccp2tx_rmax, bcm2835_ccp2tx_rmax, "monitor=0,bus=6,counter=8");
 PMU_EVENT_ATTR_STRING(ccp2tx_rpend, bcm2835_ccp2tx_rpend, "monitor=0,bus=6,counter=9");
-PMU_EVENT_ATTR_STRING(ccp2tx_ratrans, bcm2835_ccp2tx_ratrans, "monitor=0,bus=6,counter=10");
 PMU_EVENT_ATTR_STRING(mphi_rx_atwait, bcm2835_mphi_rx_atwait, "monitor=0,bus=7,counter=0");
 PMU_EVENT_ATTR_STRING(mphi_rx_atrans, bcm2835_mphi_rx_atrans, "monitor=0,bus=7,counter=1");
 PMU_EVENT_ATTR_STRING(mphi_rx_amax, bcm2835_mphi_rx_amax, "monitor=0,bus=7,counter=2");
@@ -932,7 +929,6 @@ PMU_EVENT_ATTR_STRING(mphi_rx_rwait, bcm2835_mphi_rx_rwait, "monitor=0,bus=7,cou
 PMU_EVENT_ATTR_STRING(mphi_rx_rtrans, bcm2835_mphi_rx_rtrans, "monitor=0,bus=7,counter=7");
 PMU_EVENT_ATTR_STRING(mphi_rx_rmax, bcm2835_mphi_rx_rmax, "monitor=0,bus=7,counter=8");
 PMU_EVENT_ATTR_STRING(mphi_rx_rpend, bcm2835_mphi_rx_rpend, "monitor=0,bus=7,counter=9");
-PMU_EVENT_ATTR_STRING(mphi_rx_ratrans, bcm2835_mphi_rx_ratrans, "monitor=0,bus=7,counter=10");
 PMU_EVENT_ATTR_STRING(mphi_tx_atwait, bcm2835_mphi_tx_atwait, "monitor=0,bus=8,counter=0");
 PMU_EVENT_ATTR_STRING(mphi_tx_atrans, bcm2835_mphi_tx_atrans, "monitor=0,bus=8,counter=1");
 PMU_EVENT_ATTR_STRING(mphi_tx_amax, bcm2835_mphi_tx_amax, "monitor=0,bus=8,counter=2");
@@ -943,7 +939,6 @@ PMU_EVENT_ATTR_STRING(mphi_tx_rwait, bcm2835_mphi_tx_rwait, "monitor=0,bus=8,cou
 PMU_EVENT_ATTR_STRING(mphi_tx_rtrans, bcm2835_mphi_tx_rtrans, "monitor=0,bus=8,counter=7");
 PMU_EVENT_ATTR_STRING(mphi_tx_rmax, bcm2835_mphi_tx_rmax, "monitor=0,bus=8,counter=8");
 PMU_EVENT_ATTR_STRING(mphi_tx_rpend, bcm2835_mphi_tx_rpend, "monitor=0,bus=8,counter=9");
-PMU_EVENT_ATTR_STRING(mphi_tx_ratrans, bcm2835_mphi_tx_ratrans, "monitor=0,bus=8,counter=10");
 PMU_EVENT_ATTR_STRING(hvs_atwait, bcm2835_hvs_atwait, "monitor=0,bus=9,counter=0");
 PMU_EVENT_ATTR_STRING(hvs_atrans, bcm2835_hvs_atrans, "monitor=0,bus=9,counter=1");
 PMU_EVENT_ATTR_STRING(hvs_amax, bcm2835_hvs_amax, "monitor=0,bus=9,counter=2");
@@ -954,7 +949,6 @@ PMU_EVENT_ATTR_STRING(hvs_rwait, bcm2835_hvs_rwait, "monitor=0,bus=9,counter=6")
 PMU_EVENT_ATTR_STRING(hvs_rtrans, bcm2835_hvs_rtrans, "monitor=0,bus=9,counter=7");
 PMU_EVENT_ATTR_STRING(hvs_rmax, bcm2835_hvs_rmax, "monitor=0,bus=9,counter=8");
 PMU_EVENT_ATTR_STRING(hvs_rpend, bcm2835_hvs_rpend, "monitor=0,bus=9,counter=9");
-PMU_EVENT_ATTR_STRING(hvs_ratrans, bcm2835_hvs_ratrans, "monitor=0,bus=9,counter=10");
 PMU_EVENT_ATTR_STRING(h264_atwait, bcm2835_h264_atwait, "monitor=0,bus=10,counter=0");
 PMU_EVENT_ATTR_STRING(h264_atrans, bcm2835_h264_atrans, "monitor=0,bus=10,counter=1");
 PMU_EVENT_ATTR_STRING(h264_amax, bcm2835_h264_amax, "monitor=0,bus=10,counter=2");
@@ -965,7 +959,6 @@ PMU_EVENT_ATTR_STRING(h264_rwait, bcm2835_h264_rwait, "monitor=0,bus=10,counter=
 PMU_EVENT_ATTR_STRING(h264_rtrans, bcm2835_h264_rtrans, "monitor=0,bus=10,counter=7");
 PMU_EVENT_ATTR_STRING(h264_rmax, bcm2835_h264_rmax, "monitor=0,bus=10,counter=8");
 PMU_EVENT_ATTR_STRING(h264_rpend, bcm2835_h264_rpend, "monitor=0,bus=10,counter=9");
-PMU_EVENT_ATTR_STRING(h264_ratrans, bcm2835_h264_ratrans, "monitor=0,bus=10,counter=10");
 PMU_EVENT_ATTR_STRING(isp_atwait, bcm2835_isp_atwait, "monitor=0,bus=11,counter=0");
 PMU_EVENT_ATTR_STRING(isp_atrans, bcm2835_isp_atrans, "monitor=0,bus=11,counter=1");
 PMU_EVENT_ATTR_STRING(isp_amax, bcm2835_isp_amax, "monitor=0,bus=11,counter=2");
@@ -976,7 +969,6 @@ PMU_EVENT_ATTR_STRING(isp_rwait, bcm2835_isp_rwait, "monitor=0,bus=11,counter=6"
 PMU_EVENT_ATTR_STRING(isp_rtrans, bcm2835_isp_rtrans, "monitor=0,bus=11,counter=7");
 PMU_EVENT_ATTR_STRING(isp_rmax, bcm2835_isp_rmax, "monitor=0,bus=11,counter=8");
 PMU_EVENT_ATTR_STRING(isp_rpend, bcm2835_isp_rpend, "monitor=0,bus=11,counter=9");
-PMU_EVENT_ATTR_STRING(isp_ratrans, bcm2835_isp_ratrans, "monitor=0,bus=11,counter=10");
 PMU_EVENT_ATTR_STRING(v3d_atwait, bcm2835_v3d_atwait, "monitor=0,bus=12,counter=0");
 PMU_EVENT_ATTR_STRING(v3d_atrans, bcm2835_v3d_atrans, "monitor=0,bus=12,counter=1");
 PMU_EVENT_ATTR_STRING(v3d_amax, bcm2835_v3d_amax, "monitor=0,bus=12,counter=2");
@@ -987,7 +979,6 @@ PMU_EVENT_ATTR_STRING(v3d_rwait, bcm2835_v3d_rwait, "monitor=0,bus=12,counter=6"
 PMU_EVENT_ATTR_STRING(v3d_rtrans, bcm2835_v3d_rtrans, "monitor=0,bus=12,counter=7");
 PMU_EVENT_ATTR_STRING(v3d_rmax, bcm2835_v3d_rmax, "monitor=0,bus=12,counter=8");
 PMU_EVENT_ATTR_STRING(v3d_rpend, bcm2835_v3d_rpend, "monitor=0,bus=12,counter=9");
-PMU_EVENT_ATTR_STRING(v3d_ratrans, bcm2835_v3d_ratrans, "monitor=0,bus=12,counter=10");
 PMU_EVENT_ATTR_STRING(peripheral_atwait, bcm2835_peripheral_atwait, "monitor=0,bus=13,counter=0");
 PMU_EVENT_ATTR_STRING(peripheral_atrans, bcm2835_peripheral_atrans, "monitor=0,bus=13,counter=1");
 PMU_EVENT_ATTR_STRING(peripheral_amax, bcm2835_peripheral_amax, "monitor=0,bus=13,counter=2");
@@ -998,7 +989,6 @@ PMU_EVENT_ATTR_STRING(peripheral_rwait, bcm2835_peripheral_rwait, "monitor=0,bus
 PMU_EVENT_ATTR_STRING(peripheral_rtrans, bcm2835_peripheral_rtrans, "monitor=0,bus=13,counter=7");
 PMU_EVENT_ATTR_STRING(peripheral_rmax, bcm2835_peripheral_rmax, "monitor=0,bus=13,counter=8");
 PMU_EVENT_ATTR_STRING(peripheral_rpend, bcm2835_peripheral_rpend, "monitor=0,bus=13,counter=9");
-PMU_EVENT_ATTR_STRING(peripheral_ratrans, bcm2835_peripheral_ratrans, "monitor=0,bus=13,counter=10");
 PMU_EVENT_ATTR_STRING(cpu_uc_atwait, bcm2835_cpu_uc_atwait, "monitor=0,bus=14,counter=0");
 PMU_EVENT_ATTR_STRING(cpu_uc_atrans, bcm2835_cpu_uc_atrans, "monitor=0,bus=14,counter=1");
 PMU_EVENT_ATTR_STRING(cpu_uc_amax, bcm2835_cpu_uc_amax, "monitor=0,bus=14,counter=2");
@@ -1009,7 +999,6 @@ PMU_EVENT_ATTR_STRING(cpu_uc_rwait, bcm2835_cpu_uc_rwait, "monitor=0,bus=14,coun
 PMU_EVENT_ATTR_STRING(cpu_uc_rtrans, bcm2835_cpu_uc_rtrans, "monitor=0,bus=14,counter=7");
 PMU_EVENT_ATTR_STRING(cpu_uc_rmax, bcm2835_cpu_uc_rmax, "monitor=0,bus=14,counter=8");
 PMU_EVENT_ATTR_STRING(cpu_uc_rpend, bcm2835_cpu_uc_rpend, "monitor=0,bus=14,counter=9");
-PMU_EVENT_ATTR_STRING(cpu_uc_ratrans, bcm2835_cpu_uc_ratrans, "monitor=0,bus=14,counter=10");
 PMU_EVENT_ATTR_STRING(cpu_l2_atwait, bcm2835_cpu_l2_atwait, "monitor=0,bus=15,counter=0");
 PMU_EVENT_ATTR_STRING(cpu_l2_atrans, bcm2835_cpu_l2_atrans, "monitor=0,bus=15,counter=1");
 PMU_EVENT_ATTR_STRING(cpu_l2_amax, bcm2835_cpu_l2_amax, "monitor=0,bus=15,counter=2");
@@ -1020,7 +1009,6 @@ PMU_EVENT_ATTR_STRING(cpu_l2_rwait, bcm2835_cpu_l2_rwait, "monitor=0,bus=15,coun
 PMU_EVENT_ATTR_STRING(cpu_l2_rtrans, bcm2835_cpu_l2_rtrans, "monitor=0,bus=15,counter=7");
 PMU_EVENT_ATTR_STRING(cpu_l2_rmax, bcm2835_cpu_l2_rmax, "monitor=0,bus=15,counter=8");
 PMU_EVENT_ATTR_STRING(cpu_l2_rpend, bcm2835_cpu_l2_rpend, "monitor=0,bus=15,counter=9");
-PMU_EVENT_ATTR_STRING(cpu_l2_ratrans, bcm2835_cpu_l2_ratrans, "monitor=0,bus=15,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_atwait, bcm2835_vpu_vpu1_d_l2_atwait, "monitor=1,bus=0,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_atrans, bcm2835_vpu_vpu1_d_l2_atrans, "monitor=1,bus=0,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_amax, bcm2835_vpu_vpu1_d_l2_amax, "monitor=1,bus=0,counter=2");
@@ -1031,7 +1019,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_rwait, bcm2835_vpu_vpu1_d_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_rtrans, bcm2835_vpu_vpu1_d_l2_rtrans, "monitor=1,bus=0,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_rmax, bcm2835_vpu_vpu1_d_l2_rmax, "monitor=1,bus=0,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_rpend, bcm2835_vpu_vpu1_d_l2_rpend, "monitor=1,bus=0,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_ratrans, bcm2835_vpu_vpu1_d_l2_ratrans, "monitor=1,bus=0,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_atwait, bcm2835_vpu_vpu0_d_l2_atwait, "monitor=1,bus=1,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_atrans, bcm2835_vpu_vpu0_d_l2_atrans, "monitor=1,bus=1,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_amax, bcm2835_vpu_vpu0_d_l2_amax, "monitor=1,bus=1,counter=2");
@@ -1042,7 +1029,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_rwait, bcm2835_vpu_vpu0_d_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_rtrans, bcm2835_vpu_vpu0_d_l2_rtrans, "monitor=1,bus=1,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_rmax, bcm2835_vpu_vpu0_d_l2_rmax, "monitor=1,bus=1,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_rpend, bcm2835_vpu_vpu0_d_l2_rpend, "monitor=1,bus=1,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_ratrans, bcm2835_vpu_vpu0_d_l2_ratrans, "monitor=1,bus=1,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_atwait, bcm2835_vpu_vpu1_i_l2_atwait, "monitor=1,bus=2,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_atrans, bcm2835_vpu_vpu1_i_l2_atrans, "monitor=1,bus=2,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_amax, bcm2835_vpu_vpu1_i_l2_amax, "monitor=1,bus=2,counter=2");
@@ -1053,7 +1039,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_rwait, bcm2835_vpu_vpu1_i_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_rtrans, bcm2835_vpu_vpu1_i_l2_rtrans, "monitor=1,bus=2,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_rmax, bcm2835_vpu_vpu1_i_l2_rmax, "monitor=1,bus=2,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_rpend, bcm2835_vpu_vpu1_i_l2_rpend, "monitor=1,bus=2,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_ratrans, bcm2835_vpu_vpu1_i_l2_ratrans, "monitor=1,bus=2,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_atwait, bcm2835_vpu_vpu0_i_l2_atwait, "monitor=1,bus=3,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_atrans, bcm2835_vpu_vpu0_i_l2_atrans, "monitor=1,bus=3,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_amax, bcm2835_vpu_vpu0_i_l2_amax, "monitor=1,bus=3,counter=2");
@@ -1064,7 +1049,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_rwait, bcm2835_vpu_vpu0_i_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_rtrans, bcm2835_vpu_vpu0_i_l2_rtrans, "monitor=1,bus=3,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_rmax, bcm2835_vpu_vpu0_i_l2_rmax, "monitor=1,bus=3,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_rpend, bcm2835_vpu_vpu0_i_l2_rpend, "monitor=1,bus=3,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_ratrans, bcm2835_vpu_vpu0_i_l2_ratrans, "monitor=1,bus=3,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_atwait, bcm2835_vpu_system_l2_atwait, "monitor=1,bus=4,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_atrans, bcm2835_vpu_system_l2_atrans, "monitor=1,bus=4,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_amax, bcm2835_vpu_system_l2_amax, "monitor=1,bus=4,counter=2");
@@ -1075,7 +1059,6 @@ PMU_EVENT_ATTR_STRING(vpu_system_l2_rwait, bcm2835_vpu_system_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_system_l2_rtrans, bcm2835_vpu_system_l2_rtrans, "monitor=1,bus=4,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_rmax, bcm2835_vpu_system_l2_rmax, "monitor=1,bus=4,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_rpend, bcm2835_vpu_system_l2_rpend, "monitor=1,bus=4,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_system_l2_ratrans, bcm2835_vpu_system_l2_ratrans, "monitor=1,bus=4,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_l2_flush_atwait, bcm2835_vpu_l2_flush_atwait, "monitor=1,bus=5,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_l2_flush_atrans, bcm2835_vpu_l2_flush_atrans, "monitor=1,bus=5,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_l2_flush_amax, bcm2835_vpu_l2_flush_amax, "monitor=1,bus=5,counter=2");
@@ -1086,7 +1069,6 @@ PMU_EVENT_ATTR_STRING(vpu_l2_flush_rwait, bcm2835_vpu_l2_flush_rwait, "monitor=1
 PMU_EVENT_ATTR_STRING(vpu_l2_flush_rtrans, bcm2835_vpu_l2_flush_rtrans, "monitor=1,bus=5,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_l2_flush_rmax, bcm2835_vpu_l2_flush_rmax, "monitor=1,bus=5,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_l2_flush_rpend, bcm2835_vpu_l2_flush_rpend, "monitor=1,bus=5,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_l2_flush_ratrans, bcm2835_vpu_l2_flush_ratrans, "monitor=1,bus=5,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_atwait, bcm2835_vpu_dma_l2_atwait, "monitor=1,bus=6,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_atrans, bcm2835_vpu_dma_l2_atrans, "monitor=1,bus=6,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_amax, bcm2835_vpu_dma_l2_amax, "monitor=1,bus=6,counter=2");
@@ -1097,7 +1079,6 @@ PMU_EVENT_ATTR_STRING(vpu_dma_l2_rwait, bcm2835_vpu_dma_l2_rwait, "monitor=1,bus
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_rtrans, bcm2835_vpu_dma_l2_rtrans, "monitor=1,bus=6,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_rmax, bcm2835_vpu_dma_l2_rmax, "monitor=1,bus=6,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_rpend, bcm2835_vpu_dma_l2_rpend, "monitor=1,bus=6,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_dma_l2_ratrans, bcm2835_vpu_dma_l2_ratrans, "monitor=1,bus=6,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_atwait, bcm2835_vpu_vpu1_d_uc_atwait, "monitor=1,bus=7,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_atrans, bcm2835_vpu_vpu1_d_uc_atrans, "monitor=1,bus=7,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_amax, bcm2835_vpu_vpu1_d_uc_amax, "monitor=1,bus=7,counter=2");
@@ -1108,7 +1089,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_rwait, bcm2835_vpu_vpu1_d_uc_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_rtrans, bcm2835_vpu_vpu1_d_uc_rtrans, "monitor=1,bus=7,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_rmax, bcm2835_vpu_vpu1_d_uc_rmax, "monitor=1,bus=7,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_rpend, bcm2835_vpu_vpu1_d_uc_rpend, "monitor=1,bus=7,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_ratrans, bcm2835_vpu_vpu1_d_uc_ratrans, "monitor=1,bus=7,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_atwait, bcm2835_vpu_vpu0_d_uc_atwait, "monitor=1,bus=8,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_atrans, bcm2835_vpu_vpu0_d_uc_atrans, "monitor=1,bus=8,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_amax, bcm2835_vpu_vpu0_d_uc_amax, "monitor=1,bus=8,counter=2");
@@ -1119,7 +1099,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_rwait, bcm2835_vpu_vpu0_d_uc_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_rtrans, bcm2835_vpu_vpu0_d_uc_rtrans, "monitor=1,bus=8,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_rmax, bcm2835_vpu_vpu0_d_uc_rmax, "monitor=1,bus=8,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_rpend, bcm2835_vpu_vpu0_d_uc_rpend, "monitor=1,bus=8,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_ratrans, bcm2835_vpu_vpu0_d_uc_ratrans, "monitor=1,bus=8,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_atwait, bcm2835_vpu_vpu1_i_uc_atwait, "monitor=1,bus=9,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_atrans, bcm2835_vpu_vpu1_i_uc_atrans, "monitor=1,bus=9,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_amax, bcm2835_vpu_vpu1_i_uc_amax, "monitor=1,bus=9,counter=2");
@@ -1130,7 +1109,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_rwait, bcm2835_vpu_vpu1_i_uc_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_rtrans, bcm2835_vpu_vpu1_i_uc_rtrans, "monitor=1,bus=9,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_rmax, bcm2835_vpu_vpu1_i_uc_rmax, "monitor=1,bus=9,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_rpend, bcm2835_vpu_vpu1_i_uc_rpend, "monitor=1,bus=9,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_ratrans, bcm2835_vpu_vpu1_i_uc_ratrans, "monitor=1,bus=9,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_atwait, bcm2835_vpu_vpu0_i_uc_atwait, "monitor=1,bus=10,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_atrans, bcm2835_vpu_vpu0_i_uc_atrans, "monitor=1,bus=10,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_amax, bcm2835_vpu_vpu0_i_uc_amax, "monitor=1,bus=10,counter=2");
@@ -1141,7 +1119,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_rwait, bcm2835_vpu_vpu0_i_uc_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_rtrans, bcm2835_vpu_vpu0_i_uc_rtrans, "monitor=1,bus=10,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_rmax, bcm2835_vpu_vpu0_i_uc_rmax, "monitor=1,bus=10,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_rpend, bcm2835_vpu_vpu0_i_uc_rpend, "monitor=1,bus=10,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_ratrans, bcm2835_vpu_vpu0_i_uc_ratrans, "monitor=1,bus=10,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_system_uc_atwait, bcm2835_vpu_system_uc_atwait, "monitor=1,bus=11,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_system_uc_atrans, bcm2835_vpu_system_uc_atrans, "monitor=1,bus=11,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_system_uc_amax, bcm2835_vpu_system_uc_amax, "monitor=1,bus=11,counter=2");
@@ -1152,7 +1129,6 @@ PMU_EVENT_ATTR_STRING(vpu_system_uc_rwait, bcm2835_vpu_system_uc_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_system_uc_rtrans, bcm2835_vpu_system_uc_rtrans, "monitor=1,bus=11,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_system_uc_rmax, bcm2835_vpu_system_uc_rmax, "monitor=1,bus=11,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_system_uc_rpend, bcm2835_vpu_system_uc_rpend, "monitor=1,bus=11,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_system_uc_ratrans, bcm2835_vpu_system_uc_ratrans, "monitor=1,bus=11,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_atwait, bcm2835_vpu_l2_out_atwait, "monitor=1,bus=12,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_atrans, bcm2835_vpu_l2_out_atrans, "monitor=1,bus=12,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_amax, bcm2835_vpu_l2_out_amax, "monitor=1,bus=12,counter=2");
@@ -1163,7 +1139,6 @@ PMU_EVENT_ATTR_STRING(vpu_l2_out_rwait, bcm2835_vpu_l2_out_rwait, "monitor=1,bus
 PMU_EVENT_ATTR_STRING(vpu_l2_out_rtrans, bcm2835_vpu_l2_out_rtrans, "monitor=1,bus=12,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_rmax, bcm2835_vpu_l2_out_rmax, "monitor=1,bus=12,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_rpend, bcm2835_vpu_l2_out_rpend, "monitor=1,bus=12,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_l2_out_ratrans, bcm2835_vpu_l2_out_ratrans, "monitor=1,bus=12,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_atwait, bcm2835_vpu_dma_uc_atwait, "monitor=1,bus=13,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_atrans, bcm2835_vpu_dma_uc_atrans, "monitor=1,bus=13,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_amax, bcm2835_vpu_dma_uc_amax, "monitor=1,bus=13,counter=2");
@@ -1174,7 +1149,6 @@ PMU_EVENT_ATTR_STRING(vpu_dma_uc_rwait, bcm2835_vpu_dma_uc_rwait, "monitor=1,bus
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_rtrans, bcm2835_vpu_dma_uc_rtrans, "monitor=1,bus=13,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_rmax, bcm2835_vpu_dma_uc_rmax, "monitor=1,bus=13,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_rpend, bcm2835_vpu_dma_uc_rpend, "monitor=1,bus=13,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_dma_uc_ratrans, bcm2835_vpu_dma_uc_ratrans, "monitor=1,bus=13,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_sdram_atwait, bcm2835_vpu_sdram_atwait, "monitor=1,bus=14,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_sdram_atrans, bcm2835_vpu_sdram_atrans, "monitor=1,bus=14,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_sdram_amax, bcm2835_vpu_sdram_amax, "monitor=1,bus=14,counter=2");
@@ -1185,7 +1159,6 @@ PMU_EVENT_ATTR_STRING(vpu_sdram_rwait, bcm2835_vpu_sdram_rwait, "monitor=1,bus=1
 PMU_EVENT_ATTR_STRING(vpu_sdram_rtrans, bcm2835_vpu_sdram_rtrans, "monitor=1,bus=14,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_sdram_rmax, bcm2835_vpu_sdram_rmax, "monitor=1,bus=14,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_sdram_rpend, bcm2835_vpu_sdram_rpend, "monitor=1,bus=14,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_sdram_ratrans, bcm2835_vpu_sdram_ratrans, "monitor=1,bus=14,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_atwait, bcm2835_vpu_l2_in_atwait, "monitor=1,bus=15,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_atrans, bcm2835_vpu_l2_in_atrans, "monitor=1,bus=15,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_amax, bcm2835_vpu_l2_in_amax, "monitor=1,bus=15,counter=2");
@@ -1196,7 +1169,6 @@ PMU_EVENT_ATTR_STRING(vpu_l2_in_rwait, bcm2835_vpu_l2_in_rwait, "monitor=1,bus=1
 PMU_EVENT_ATTR_STRING(vpu_l2_in_rtrans, bcm2835_vpu_l2_in_rtrans, "monitor=1,bus=15,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_rmax, bcm2835_vpu_l2_in_rmax, "monitor=1,bus=15,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_rpend, bcm2835_vpu_l2_in_rpend, "monitor=1,bus=15,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_l2_in_ratrans, bcm2835_vpu_l2_in_ratrans, "monitor=1,bus=15,counter=10");
 
 PMU_FORMAT_ATTR(monitor, "config:9-9");
 PMU_FORMAT_ATTR(bus, "config:4-8");
@@ -1244,7 +1216,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_dma_l2_rtrans.attr.attr,
 	&bcm2835_dma_l2_rmax.attr.attr,
 	&bcm2835_dma_l2_rpend.attr.attr,
-	&bcm2835_dma_l2_ratrans.attr.attr,
 	&bcm2835_trans_atwait.attr.attr,
 	&bcm2835_trans_atrans.attr.attr,
 	&bcm2835_trans_amax.attr.attr,
@@ -1255,7 +1226,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_trans_rtrans.attr.attr,
 	&bcm2835_trans_rmax.attr.attr,
 	&bcm2835_trans_rpend.attr.attr,
-	&bcm2835_trans_ratrans.attr.attr,
 	&bcm2835_jpeg_atwait.attr.attr,
 	&bcm2835_jpeg_atrans.attr.attr,
 	&bcm2835_jpeg_amax.attr.attr,
@@ -1266,7 +1236,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_jpeg_rtrans.attr.attr,
 	&bcm2835_jpeg_rmax.attr.attr,
 	&bcm2835_jpeg_rpend.attr.attr,
-	&bcm2835_jpeg_ratrans.attr.attr,
 	&bcm2835_system_uc_atwait.attr.attr,
 	&bcm2835_system_uc_atrans.attr.attr,
 	&bcm2835_system_uc_amax.attr.attr,
@@ -1277,7 +1246,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_system_uc_rtrans.attr.attr,
 	&bcm2835_system_uc_rmax.attr.attr,
 	&bcm2835_system_uc_rpend.attr.attr,
-	&bcm2835_system_uc_ratrans.attr.attr,
 	&bcm2835_dma_uc_atwait.attr.attr,
 	&bcm2835_dma_uc_atrans.attr.attr,
 	&bcm2835_dma_uc_amax.attr.attr,
@@ -1288,7 +1256,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_dma_uc_rtrans.attr.attr,
 	&bcm2835_dma_uc_rmax.attr.attr,
 	&bcm2835_dma_uc_rpend.attr.attr,
-	&bcm2835_dma_uc_ratrans.attr.attr,
 	&bcm2835_system_l2_atwait.attr.attr,
 	&bcm2835_system_l2_atrans.attr.attr,
 	&bcm2835_system_l2_amax.attr.attr,
@@ -1299,7 +1266,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_system_l2_rtrans.attr.attr,
 	&bcm2835_system_l2_rmax.attr.attr,
 	&bcm2835_system_l2_rpend.attr.attr,
-	&bcm2835_system_l2_ratrans.attr.attr,
 	&bcm2835_ccp2tx_atwait.attr.attr,
 	&bcm2835_ccp2tx_atrans.attr.attr,
 	&bcm2835_ccp2tx_amax.attr.attr,
@@ -1310,7 +1276,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_ccp2tx_rtrans.attr.attr,
 	&bcm2835_ccp2tx_rmax.attr.attr,
 	&bcm2835_ccp2tx_rpend.attr.attr,
-	&bcm2835_ccp2tx_ratrans.attr.attr,
 	&bcm2835_mphi_rx_atwait.attr.attr,
 	&bcm2835_mphi_rx_atrans.attr.attr,
 	&bcm2835_mphi_rx_amax.attr.attr,
@@ -1321,7 +1286,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_mphi_rx_rtrans.attr.attr,
 	&bcm2835_mphi_rx_rmax.attr.attr,
 	&bcm2835_mphi_rx_rpend.attr.attr,
-	&bcm2835_mphi_rx_ratrans.attr.attr,
 	&bcm2835_mphi_tx_atwait.attr.attr,
 	&bcm2835_mphi_tx_atrans.attr.attr,
 	&bcm2835_mphi_tx_amax.attr.attr,
@@ -1332,7 +1296,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_mphi_tx_rtrans.attr.attr,
 	&bcm2835_mphi_tx_rmax.attr.attr,
 	&bcm2835_mphi_tx_rpend.attr.attr,
-	&bcm2835_mphi_tx_ratrans.attr.attr,
 	&bcm2835_hvs_atwait.attr.attr,
 	&bcm2835_hvs_atrans.attr.attr,
 	&bcm2835_hvs_amax.attr.attr,
@@ -1343,7 +1306,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_hvs_rtrans.attr.attr,
 	&bcm2835_hvs_rmax.attr.attr,
 	&bcm2835_hvs_rpend.attr.attr,
-	&bcm2835_hvs_ratrans.attr.attr,
 	&bcm2835_h264_atwait.attr.attr,
 	&bcm2835_h264_atrans.attr.attr,
 	&bcm2835_h264_amax.attr.attr,
@@ -1354,7 +1316,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_h264_rtrans.attr.attr,
 	&bcm2835_h264_rmax.attr.attr,
 	&bcm2835_h264_rpend.attr.attr,
-	&bcm2835_h264_ratrans.attr.attr,
 	&bcm2835_isp_atwait.attr.attr,
 	&bcm2835_isp_atrans.attr.attr,
 	&bcm2835_isp_amax.attr.attr,
@@ -1365,7 +1326,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_isp_rtrans.attr.attr,
 	&bcm2835_isp_rmax.attr.attr,
 	&bcm2835_isp_rpend.attr.attr,
-	&bcm2835_isp_ratrans.attr.attr,
 	&bcm2835_v3d_atwait.attr.attr,
 	&bcm2835_v3d_atrans.attr.attr,
 	&bcm2835_v3d_amax.attr.attr,
@@ -1376,7 +1336,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_v3d_rtrans.attr.attr,
 	&bcm2835_v3d_rmax.attr.attr,
 	&bcm2835_v3d_rpend.attr.attr,
-	&bcm2835_v3d_ratrans.attr.attr,
 	&bcm2835_peripheral_atwait.attr.attr,
 	&bcm2835_peripheral_atrans.attr.attr,
 	&bcm2835_peripheral_amax.attr.attr,
@@ -1387,7 +1346,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_peripheral_rtrans.attr.attr,
 	&bcm2835_peripheral_rmax.attr.attr,
 	&bcm2835_peripheral_rpend.attr.attr,
-	&bcm2835_peripheral_ratrans.attr.attr,
 	&bcm2835_cpu_uc_atwait.attr.attr,
 	&bcm2835_cpu_uc_atrans.attr.attr,
 	&bcm2835_cpu_uc_amax.attr.attr,
@@ -1398,7 +1356,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_cpu_uc_rtrans.attr.attr,
 	&bcm2835_cpu_uc_rmax.attr.attr,
 	&bcm2835_cpu_uc_rpend.attr.attr,
-	&bcm2835_cpu_uc_ratrans.attr.attr,
 	&bcm2835_cpu_l2_atwait.attr.attr,
 	&bcm2835_cpu_l2_atrans.attr.attr,
 	&bcm2835_cpu_l2_amax.attr.attr,
@@ -1409,7 +1366,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_cpu_l2_rtrans.attr.attr,
 	&bcm2835_cpu_l2_rmax.attr.attr,
 	&bcm2835_cpu_l2_rpend.attr.attr,
-	&bcm2835_cpu_l2_ratrans.attr.attr,
 	&bcm2835_vpu_vpu1_d_l2_atwait.attr.attr,
 	&bcm2835_vpu_vpu1_d_l2_atrans.attr.attr,
 	&bcm2835_vpu_vpu1_d_l2_amax.attr.attr,
@@ -1420,7 +1376,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_vpu1_d_l2_rtrans.attr.attr,
 	&bcm2835_vpu_vpu1_d_l2_rmax.attr.attr,
 	&bcm2835_vpu_vpu1_d_l2_rpend.attr.attr,
-	&bcm2835_vpu_vpu1_d_l2_ratrans.attr.attr,
 	&bcm2835_vpu_vpu0_d_l2_atwait.attr.attr,
 	&bcm2835_vpu_vpu0_d_l2_atrans.attr.attr,
 	&bcm2835_vpu_vpu0_d_l2_amax.attr.attr,
@@ -1431,7 +1386,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_vpu0_d_l2_rtrans.attr.attr,
 	&bcm2835_vpu_vpu0_d_l2_rmax.attr.attr,
 	&bcm2835_vpu_vpu0_d_l2_rpend.attr.attr,
-	&bcm2835_vpu_vpu0_d_l2_ratrans.attr.attr,
 	&bcm2835_vpu_vpu1_i_l2_atwait.attr.attr,
 	&bcm2835_vpu_vpu1_i_l2_atrans.attr.attr,
 	&bcm2835_vpu_vpu1_i_l2_amax.attr.attr,
@@ -1442,7 +1396,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_vpu1_i_l2_rtrans.attr.attr,
 	&bcm2835_vpu_vpu1_i_l2_rmax.attr.attr,
 	&bcm2835_vpu_vpu1_i_l2_rpend.attr.attr,
-	&bcm2835_vpu_vpu1_i_l2_ratrans.attr.attr,
 	&bcm2835_vpu_vpu0_i_l2_atwait.attr.attr,
 	&bcm2835_vpu_vpu0_i_l2_atrans.attr.attr,
 	&bcm2835_vpu_vpu0_i_l2_amax.attr.attr,
@@ -1453,7 +1406,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_vpu0_i_l2_rtrans.attr.attr,
 	&bcm2835_vpu_vpu0_i_l2_rmax.attr.attr,
 	&bcm2835_vpu_vpu0_i_l2_rpend.attr.attr,
-	&bcm2835_vpu_vpu0_i_l2_ratrans.attr.attr,
 	&bcm2835_vpu_system_l2_atwait.attr.attr,
 	&bcm2835_vpu_system_l2_atrans.attr.attr,
 	&bcm2835_vpu_system_l2_amax.attr.attr,
@@ -1464,7 +1416,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_system_l2_rtrans.attr.attr,
 	&bcm2835_vpu_system_l2_rmax.attr.attr,
 	&bcm2835_vpu_system_l2_rpend.attr.attr,
-	&bcm2835_vpu_system_l2_ratrans.attr.attr,
 	&bcm2835_vpu_l2_flush_atwait.attr.attr,
 	&bcm2835_vpu_l2_flush_atrans.attr.attr,
 	&bcm2835_vpu_l2_flush_amax.attr.attr,
@@ -1475,7 +1426,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_l2_flush_rtrans.attr.attr,
 	&bcm2835_vpu_l2_flush_rmax.attr.attr,
 	&bcm2835_vpu_l2_flush_rpend.attr.attr,
-	&bcm2835_vpu_l2_flush_ratrans.attr.attr,
 	&bcm2835_vpu_dma_l2_atwait.attr.attr,
 	&bcm2835_vpu_dma_l2_atrans.attr.attr,
 	&bcm2835_vpu_dma_l2_amax.attr.attr,
@@ -1486,7 +1436,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_dma_l2_rtrans.attr.attr,
 	&bcm2835_vpu_dma_l2_rmax.attr.attr,
 	&bcm2835_vpu_dma_l2_rpend.attr.attr,
-	&bcm2835_vpu_dma_l2_ratrans.attr.attr,
 	&bcm2835_vpu_vpu1_d_uc_atwait.attr.attr,
 	&bcm2835_vpu_vpu1_d_uc_atrans.attr.attr,
 	&bcm2835_vpu_vpu1_d_uc_amax.attr.attr,
@@ -1497,7 +1446,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_vpu1_d_uc_rtrans.attr.attr,
 	&bcm2835_vpu_vpu1_d_uc_rmax.attr.attr,
 	&bcm2835_vpu_vpu1_d_uc_rpend.attr.attr,
-	&bcm2835_vpu_vpu1_d_uc_ratrans.attr.attr,
 	&bcm2835_vpu_vpu0_d_uc_atwait.attr.attr,
 	&bcm2835_vpu_vpu0_d_uc_atrans.attr.attr,
 	&bcm2835_vpu_vpu0_d_uc_amax.attr.attr,
@@ -1508,7 +1456,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_vpu0_d_uc_rtrans.attr.attr,
 	&bcm2835_vpu_vpu0_d_uc_rmax.attr.attr,
 	&bcm2835_vpu_vpu0_d_uc_rpend.attr.attr,
-	&bcm2835_vpu_vpu0_d_uc_ratrans.attr.attr,
 	&bcm2835_vpu_vpu1_i_uc_atwait.attr.attr,
 	&bcm2835_vpu_vpu1_i_uc_atrans.attr.attr,
 	&bcm2835_vpu_vpu1_i_uc_amax.attr.attr,
@@ -1519,7 +1466,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_vpu1_i_uc_rtrans.attr.attr,
 	&bcm2835_vpu_vpu1_i_uc_rmax.attr.attr,
 	&bcm2835_vpu_vpu1_i_uc_rpend.attr.attr,
-	&bcm2835_vpu_vpu1_i_uc_ratrans.attr.attr,
 	&bcm2835_vpu_vpu0_i_uc_atwait.attr.attr,
 	&bcm2835_vpu_vpu0_i_uc_atrans.attr.attr,
 	&bcm2835_vpu_vpu0_i_uc_amax.attr.attr,
@@ -1530,7 +1476,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_vpu0_i_uc_rtrans.attr.attr,
 	&bcm2835_vpu_vpu0_i_uc_rmax.attr.attr,
 	&bcm2835_vpu_vpu0_i_uc_rpend.attr.attr,
-	&bcm2835_vpu_vpu0_i_uc_ratrans.attr.attr,
 	&bcm2835_vpu_system_uc_atwait.attr.attr,
 	&bcm2835_vpu_system_uc_atrans.attr.attr,
 	&bcm2835_vpu_system_uc_amax.attr.attr,
@@ -1541,7 +1486,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_system_uc_rtrans.attr.attr,
 	&bcm2835_vpu_system_uc_rmax.attr.attr,
 	&bcm2835_vpu_system_uc_rpend.attr.attr,
-	&bcm2835_vpu_system_uc_ratrans.attr.attr,
 	&bcm2835_vpu_l2_out_atwait.attr.attr,
 	&bcm2835_vpu_l2_out_atrans.attr.attr,
 	&bcm2835_vpu_l2_out_amax.attr.attr,
@@ -1552,7 +1496,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_l2_out_rtrans.attr.attr,
 	&bcm2835_vpu_l2_out_rmax.attr.attr,
 	&bcm2835_vpu_l2_out_rpend.attr.attr,
-	&bcm2835_vpu_l2_out_ratrans.attr.attr,
 	&bcm2835_vpu_dma_uc_atwait.attr.attr,
 	&bcm2835_vpu_dma_uc_atrans.attr.attr,
 	&bcm2835_vpu_dma_uc_amax.attr.attr,
@@ -1563,7 +1506,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_dma_uc_rtrans.attr.attr,
 	&bcm2835_vpu_dma_uc_rmax.attr.attr,
 	&bcm2835_vpu_dma_uc_rpend.attr.attr,
-	&bcm2835_vpu_dma_uc_ratrans.attr.attr,
 	&bcm2835_vpu_sdram_atwait.attr.attr,
 	&bcm2835_vpu_sdram_atrans.attr.attr,
 	&bcm2835_vpu_sdram_amax.attr.attr,
@@ -1574,7 +1516,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_sdram_rtrans.attr.attr,
 	&bcm2835_vpu_sdram_rmax.attr.attr,
 	&bcm2835_vpu_sdram_rpend.attr.attr,
-	&bcm2835_vpu_sdram_ratrans.attr.attr,
 	&bcm2835_vpu_l2_in_atwait.attr.attr,
 	&bcm2835_vpu_l2_in_atrans.attr.attr,
 	&bcm2835_vpu_l2_in_amax.attr.attr,
@@ -1585,7 +1526,6 @@ static struct attribute *bcm2835_events[] = {
 	&bcm2835_vpu_l2_in_rtrans.attr.attr,
 	&bcm2835_vpu_l2_in_rmax.attr.attr,
 	&bcm2835_vpu_l2_in_rpend.attr.attr,
-	&bcm2835_vpu_l2_in_ratrans.attr.attr,
 	NULL,
 };
 
@@ -1604,7 +1544,6 @@ PMU_EVENT_ATTR_STRING(dma_l2_rwait, bcm2711_dma_l2_rwait, "monitor=0,bus=0,count
 PMU_EVENT_ATTR_STRING(dma_l2_rtrans, bcm2711_dma_l2_rtrans, "monitor=0,bus=0,counter=7");
 PMU_EVENT_ATTR_STRING(dma_l2_rmax, bcm2711_dma_l2_rmax, "monitor=0,bus=0,counter=8");
 PMU_EVENT_ATTR_STRING(dma_l2_rpend, bcm2711_dma_l2_rpend, "monitor=0,bus=0,counter=9");
-PMU_EVENT_ATTR_STRING(dma_l2_ratrans, bcm2711_dma_l2_ratrans, "monitor=0,bus=0,counter=10");
 PMU_EVENT_ATTR_STRING(trans_atwait, bcm2711_trans_atwait, "monitor=0,bus=1,counter=0");
 PMU_EVENT_ATTR_STRING(trans_atrans, bcm2711_trans_atrans, "monitor=0,bus=1,counter=1");
 PMU_EVENT_ATTR_STRING(trans_amax, bcm2711_trans_amax, "monitor=0,bus=1,counter=2");
@@ -1615,7 +1554,6 @@ PMU_EVENT_ATTR_STRING(trans_rwait, bcm2711_trans_rwait, "monitor=0,bus=1,counter
 PMU_EVENT_ATTR_STRING(trans_rtrans, bcm2711_trans_rtrans, "monitor=0,bus=1,counter=7");
 PMU_EVENT_ATTR_STRING(trans_rmax, bcm2711_trans_rmax, "monitor=0,bus=1,counter=8");
 PMU_EVENT_ATTR_STRING(trans_rpend, bcm2711_trans_rpend, "monitor=0,bus=1,counter=9");
-PMU_EVENT_ATTR_STRING(trans_ratrans, bcm2711_trans_ratrans, "monitor=0,bus=1,counter=10");
 PMU_EVENT_ATTR_STRING(jpeg_atwait, bcm2711_jpeg_atwait, "monitor=0,bus=2,counter=0");
 PMU_EVENT_ATTR_STRING(jpeg_atrans, bcm2711_jpeg_atrans, "monitor=0,bus=2,counter=1");
 PMU_EVENT_ATTR_STRING(jpeg_amax, bcm2711_jpeg_amax, "monitor=0,bus=2,counter=2");
@@ -1626,7 +1564,6 @@ PMU_EVENT_ATTR_STRING(jpeg_rwait, bcm2711_jpeg_rwait, "monitor=0,bus=2,counter=6
 PMU_EVENT_ATTR_STRING(jpeg_rtrans, bcm2711_jpeg_rtrans, "monitor=0,bus=2,counter=7");
 PMU_EVENT_ATTR_STRING(jpeg_rmax, bcm2711_jpeg_rmax, "monitor=0,bus=2,counter=8");
 PMU_EVENT_ATTR_STRING(jpeg_rpend, bcm2711_jpeg_rpend, "monitor=0,bus=2,counter=9");
-PMU_EVENT_ATTR_STRING(jpeg_ratrans, bcm2711_jpeg_ratrans, "monitor=0,bus=2,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_uc_atwait, bcm2711_vpu_uc_atwait, "monitor=0,bus=3,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_uc_atrans, bcm2711_vpu_uc_atrans, "monitor=0,bus=3,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_uc_amax, bcm2711_vpu_uc_amax, "monitor=0,bus=3,counter=2");
@@ -1637,7 +1574,6 @@ PMU_EVENT_ATTR_STRING(vpu_uc_rwait, bcm2711_vpu_uc_rwait, "monitor=0,bus=3,count
 PMU_EVENT_ATTR_STRING(vpu_uc_rtrans, bcm2711_vpu_uc_rtrans, "monitor=0,bus=3,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_uc_rmax, bcm2711_vpu_uc_rmax, "monitor=0,bus=3,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_uc_rpend, bcm2711_vpu_uc_rpend, "monitor=0,bus=3,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_uc_ratrans, bcm2711_vpu_uc_ratrans, "monitor=0,bus=3,counter=10");
 PMU_EVENT_ATTR_STRING(dma_uc_atwait, bcm2711_dma_uc_atwait, "monitor=0,bus=4,counter=0");
 PMU_EVENT_ATTR_STRING(dma_uc_atrans, bcm2711_dma_uc_atrans, "monitor=0,bus=4,counter=1");
 PMU_EVENT_ATTR_STRING(dma_uc_amax, bcm2711_dma_uc_amax, "monitor=0,bus=4,counter=2");
@@ -1648,7 +1584,6 @@ PMU_EVENT_ATTR_STRING(dma_uc_rwait, bcm2711_dma_uc_rwait, "monitor=0,bus=4,count
 PMU_EVENT_ATTR_STRING(dma_uc_rtrans, bcm2711_dma_uc_rtrans, "monitor=0,bus=4,counter=7");
 PMU_EVENT_ATTR_STRING(dma_uc_rmax, bcm2711_dma_uc_rmax, "monitor=0,bus=4,counter=8");
 PMU_EVENT_ATTR_STRING(dma_uc_rpend, bcm2711_dma_uc_rpend, "monitor=0,bus=4,counter=9");
-PMU_EVENT_ATTR_STRING(dma_uc_ratrans, bcm2711_dma_uc_ratrans, "monitor=0,bus=4,counter=10");
 PMU_EVENT_ATTR_STRING(system_l2_atwait, bcm2711_system_l2_atwait, "monitor=0,bus=5,counter=0");
 PMU_EVENT_ATTR_STRING(system_l2_atrans, bcm2711_system_l2_atrans, "monitor=0,bus=5,counter=1");
 PMU_EVENT_ATTR_STRING(system_l2_amax, bcm2711_system_l2_amax, "monitor=0,bus=5,counter=2");
@@ -1659,7 +1594,6 @@ PMU_EVENT_ATTR_STRING(system_l2_rwait, bcm2711_system_l2_rwait, "monitor=0,bus=5
 PMU_EVENT_ATTR_STRING(system_l2_rtrans, bcm2711_system_l2_rtrans, "monitor=0,bus=5,counter=7");
 PMU_EVENT_ATTR_STRING(system_l2_rmax, bcm2711_system_l2_rmax, "monitor=0,bus=5,counter=8");
 PMU_EVENT_ATTR_STRING(system_l2_rpend, bcm2711_system_l2_rpend, "monitor=0,bus=5,counter=9");
-PMU_EVENT_ATTR_STRING(system_l2_ratrans, bcm2711_system_l2_ratrans, "monitor=0,bus=5,counter=10");
 PMU_EVENT_ATTR_STRING(hvs_atwait, bcm2711_hvs_atwait, "monitor=0,bus=6,counter=0");
 PMU_EVENT_ATTR_STRING(hvs_atrans, bcm2711_hvs_atrans, "monitor=0,bus=6,counter=1");
 PMU_EVENT_ATTR_STRING(hvs_amax, bcm2711_hvs_amax, "monitor=0,bus=6,counter=2");
@@ -1670,7 +1604,6 @@ PMU_EVENT_ATTR_STRING(hvs_rwait, bcm2711_hvs_rwait, "monitor=0,bus=6,counter=6")
 PMU_EVENT_ATTR_STRING(hvs_rtrans, bcm2711_hvs_rtrans, "monitor=0,bus=6,counter=7");
 PMU_EVENT_ATTR_STRING(hvs_rmax, bcm2711_hvs_rmax, "monitor=0,bus=6,counter=8");
 PMU_EVENT_ATTR_STRING(hvs_rpend, bcm2711_hvs_rpend, "monitor=0,bus=6,counter=9");
-PMU_EVENT_ATTR_STRING(hvs_ratrans, bcm2711_hvs_ratrans, "monitor=0,bus=6,counter=10");
 PMU_EVENT_ATTR_STRING(argon_atwait, bcm2711_argon_atwait, "monitor=0,bus=7,counter=0");
 PMU_EVENT_ATTR_STRING(argon_atrans, bcm2711_argon_atrans, "monitor=0,bus=7,counter=1");
 PMU_EVENT_ATTR_STRING(argon_amax, bcm2711_argon_amax, "monitor=0,bus=7,counter=2");
@@ -1681,7 +1614,6 @@ PMU_EVENT_ATTR_STRING(argon_rwait, bcm2711_argon_rwait, "monitor=0,bus=7,counter
 PMU_EVENT_ATTR_STRING(argon_rtrans, bcm2711_argon_rtrans, "monitor=0,bus=7,counter=7");
 PMU_EVENT_ATTR_STRING(argon_rmax, bcm2711_argon_rmax, "monitor=0,bus=7,counter=8");
 PMU_EVENT_ATTR_STRING(argon_rpend, bcm2711_argon_rpend, "monitor=0,bus=7,counter=9");
-PMU_EVENT_ATTR_STRING(argon_ratrans, bcm2711_argon_ratrans, "monitor=0,bus=7,counter=10");
 PMU_EVENT_ATTR_STRING(h264_atwait, bcm2711_h264_atwait, "monitor=0,bus=8,counter=0");
 PMU_EVENT_ATTR_STRING(h264_atrans, bcm2711_h264_atrans, "monitor=0,bus=8,counter=1");
 PMU_EVENT_ATTR_STRING(h264_amax, bcm2711_h264_amax, "monitor=0,bus=8,counter=2");
@@ -1692,7 +1624,6 @@ PMU_EVENT_ATTR_STRING(h264_rwait, bcm2711_h264_rwait, "monitor=0,bus=8,counter=6
 PMU_EVENT_ATTR_STRING(h264_rtrans, bcm2711_h264_rtrans, "monitor=0,bus=8,counter=7");
 PMU_EVENT_ATTR_STRING(h264_rmax, bcm2711_h264_rmax, "monitor=0,bus=8,counter=8");
 PMU_EVENT_ATTR_STRING(h264_rpend, bcm2711_h264_rpend, "monitor=0,bus=8,counter=9");
-PMU_EVENT_ATTR_STRING(h264_ratrans, bcm2711_h264_ratrans, "monitor=0,bus=8,counter=10");
 PMU_EVENT_ATTR_STRING(peripheral_atwait, bcm2711_peripheral_atwait, "monitor=0,bus=9,counter=0");
 PMU_EVENT_ATTR_STRING(peripheral_atrans, bcm2711_peripheral_atrans, "monitor=0,bus=9,counter=1");
 PMU_EVENT_ATTR_STRING(peripheral_amax, bcm2711_peripheral_amax, "monitor=0,bus=9,counter=2");
@@ -1703,7 +1634,6 @@ PMU_EVENT_ATTR_STRING(peripheral_rwait, bcm2711_peripheral_rwait, "monitor=0,bus
 PMU_EVENT_ATTR_STRING(peripheral_rtrans, bcm2711_peripheral_rtrans, "monitor=0,bus=9,counter=7");
 PMU_EVENT_ATTR_STRING(peripheral_rmax, bcm2711_peripheral_rmax, "monitor=0,bus=9,counter=8");
 PMU_EVENT_ATTR_STRING(peripheral_rpend, bcm2711_peripheral_rpend, "monitor=0,bus=9,counter=9");
-PMU_EVENT_ATTR_STRING(peripheral_ratrans, bcm2711_peripheral_ratrans, "monitor=0,bus=9,counter=10");
 PMU_EVENT_ATTR_STRING(arm_uc_atwait, bcm2711_arm_uc_atwait, "monitor=0,bus=10,counter=0");
 PMU_EVENT_ATTR_STRING(arm_uc_atrans, bcm2711_arm_uc_atrans, "monitor=0,bus=10,counter=1");
 PMU_EVENT_ATTR_STRING(arm_uc_amax, bcm2711_arm_uc_amax, "monitor=0,bus=10,counter=2");
@@ -1714,7 +1644,6 @@ PMU_EVENT_ATTR_STRING(arm_uc_rwait, bcm2711_arm_uc_rwait, "monitor=0,bus=10,coun
 PMU_EVENT_ATTR_STRING(arm_uc_rtrans, bcm2711_arm_uc_rtrans, "monitor=0,bus=10,counter=7");
 PMU_EVENT_ATTR_STRING(arm_uc_rmax, bcm2711_arm_uc_rmax, "monitor=0,bus=10,counter=8");
 PMU_EVENT_ATTR_STRING(arm_uc_rpend, bcm2711_arm_uc_rpend, "monitor=0,bus=10,counter=9");
-PMU_EVENT_ATTR_STRING(arm_uc_ratrans, bcm2711_arm_uc_ratrans, "monitor=0,bus=10,counter=10");
 PMU_EVENT_ATTR_STRING(arm_l2_atwait, bcm2711_arm_l2_atwait, "monitor=0,bus=11,counter=0");
 PMU_EVENT_ATTR_STRING(arm_l2_atrans, bcm2711_arm_l2_atrans, "monitor=0,bus=11,counter=1");
 PMU_EVENT_ATTR_STRING(arm_l2_amax, bcm2711_arm_l2_amax, "monitor=0,bus=11,counter=2");
@@ -1725,7 +1654,6 @@ PMU_EVENT_ATTR_STRING(arm_l2_rwait, bcm2711_arm_l2_rwait, "monitor=0,bus=11,coun
 PMU_EVENT_ATTR_STRING(arm_l2_rtrans, bcm2711_arm_l2_rtrans, "monitor=0,bus=11,counter=7");
 PMU_EVENT_ATTR_STRING(arm_l2_rmax, bcm2711_arm_l2_rmax, "monitor=0,bus=11,counter=8");
 PMU_EVENT_ATTR_STRING(arm_l2_rpend, bcm2711_arm_l2_rpend, "monitor=0,bus=11,counter=9");
-PMU_EVENT_ATTR_STRING(arm_l2_ratrans, bcm2711_arm_l2_ratrans, "monitor=0,bus=11,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_atwait, bcm2711_vpu_vpu1_d_l2_atwait, "monitor=1,bus=0,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_atrans, bcm2711_vpu_vpu1_d_l2_atrans, "monitor=1,bus=0,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_amax, bcm2711_vpu_vpu1_d_l2_amax, "monitor=1,bus=0,counter=2");
@@ -1736,7 +1664,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_rwait, bcm2711_vpu_vpu1_d_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_rtrans, bcm2711_vpu_vpu1_d_l2_rtrans, "monitor=1,bus=0,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_rmax, bcm2711_vpu_vpu1_d_l2_rmax, "monitor=1,bus=0,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_rpend, bcm2711_vpu_vpu1_d_l2_rpend, "monitor=1,bus=0,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu1_d_l2_ratrans, bcm2711_vpu_vpu1_d_l2_ratrans, "monitor=1,bus=0,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_atwait, bcm2711_vpu_vpu0_d_l2_atwait, "monitor=1,bus=1,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_atrans, bcm2711_vpu_vpu0_d_l2_atrans, "monitor=1,bus=1,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_amax, bcm2711_vpu_vpu0_d_l2_amax, "monitor=1,bus=1,counter=2");
@@ -1747,7 +1674,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_rwait, bcm2711_vpu_vpu0_d_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_rtrans, bcm2711_vpu_vpu0_d_l2_rtrans, "monitor=1,bus=1,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_rmax, bcm2711_vpu_vpu0_d_l2_rmax, "monitor=1,bus=1,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_rpend, bcm2711_vpu_vpu0_d_l2_rpend, "monitor=1,bus=1,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu0_d_l2_ratrans, bcm2711_vpu_vpu0_d_l2_ratrans, "monitor=1,bus=1,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_atwait, bcm2711_vpu_vpu1_i_l2_atwait, "monitor=1,bus=2,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_atrans, bcm2711_vpu_vpu1_i_l2_atrans, "monitor=1,bus=2,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_amax, bcm2711_vpu_vpu1_i_l2_amax, "monitor=1,bus=2,counter=2");
@@ -1758,7 +1684,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_rwait, bcm2711_vpu_vpu1_i_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_rtrans, bcm2711_vpu_vpu1_i_l2_rtrans, "monitor=1,bus=2,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_rmax, bcm2711_vpu_vpu1_i_l2_rmax, "monitor=1,bus=2,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_rpend, bcm2711_vpu_vpu1_i_l2_rpend, "monitor=1,bus=2,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu1_i_l2_ratrans, bcm2711_vpu_vpu1_i_l2_ratrans, "monitor=1,bus=2,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_atwait, bcm2711_vpu_vpu0_i_l2_atwait, "monitor=1,bus=3,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_atrans, bcm2711_vpu_vpu0_i_l2_atrans, "monitor=1,bus=3,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_amax, bcm2711_vpu_vpu0_i_l2_amax, "monitor=1,bus=3,counter=2");
@@ -1769,7 +1694,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_rwait, bcm2711_vpu_vpu0_i_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_rtrans, bcm2711_vpu_vpu0_i_l2_rtrans, "monitor=1,bus=3,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_rmax, bcm2711_vpu_vpu0_i_l2_rmax, "monitor=1,bus=3,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_rpend, bcm2711_vpu_vpu0_i_l2_rpend, "monitor=1,bus=3,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu0_i_l2_ratrans, bcm2711_vpu_vpu0_i_l2_ratrans, "monitor=1,bus=3,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_atwait, bcm2711_vpu_system_l2_atwait, "monitor=1,bus=4,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_atrans, bcm2711_vpu_system_l2_atrans, "monitor=1,bus=4,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_amax, bcm2711_vpu_system_l2_amax, "monitor=1,bus=4,counter=2");
@@ -1780,7 +1704,6 @@ PMU_EVENT_ATTR_STRING(vpu_system_l2_rwait, bcm2711_vpu_system_l2_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_system_l2_rtrans, bcm2711_vpu_system_l2_rtrans, "monitor=1,bus=4,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_rmax, bcm2711_vpu_system_l2_rmax, "monitor=1,bus=4,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_system_l2_rpend, bcm2711_vpu_system_l2_rpend, "monitor=1,bus=4,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_system_l2_ratrans, bcm2711_vpu_system_l2_ratrans, "monitor=1,bus=4,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_atwait, bcm2711_vpu_dma_l2_atwait, "monitor=1,bus=5,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_atrans, bcm2711_vpu_dma_l2_atrans, "monitor=1,bus=5,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_amax, bcm2711_vpu_dma_l2_amax, "monitor=1,bus=5,counter=2");
@@ -1791,7 +1714,6 @@ PMU_EVENT_ATTR_STRING(vpu_dma_l2_rwait, bcm2711_vpu_dma_l2_rwait, "monitor=1,bus
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_rtrans, bcm2711_vpu_dma_l2_rtrans, "monitor=1,bus=5,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_rmax, bcm2711_vpu_dma_l2_rmax, "monitor=1,bus=5,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_dma_l2_rpend, bcm2711_vpu_dma_l2_rpend, "monitor=1,bus=5,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_dma_l2_ratrans, bcm2711_vpu_dma_l2_ratrans, "monitor=1,bus=5,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_atwait, bcm2711_vpu_vpu1_d_uc_atwait, "monitor=1,bus=6,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_atrans, bcm2711_vpu_vpu1_d_uc_atrans, "monitor=1,bus=6,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_amax, bcm2711_vpu_vpu1_d_uc_amax, "monitor=1,bus=6,counter=2");
@@ -1802,7 +1724,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_rwait, bcm2711_vpu_vpu1_d_uc_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_rtrans, bcm2711_vpu_vpu1_d_uc_rtrans, "monitor=1,bus=6,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_rmax, bcm2711_vpu_vpu1_d_uc_rmax, "monitor=1,bus=6,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_rpend, bcm2711_vpu_vpu1_d_uc_rpend, "monitor=1,bus=6,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu1_d_uc_ratrans, bcm2711_vpu_vpu1_d_uc_ratrans, "monitor=1,bus=6,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_atwait, bcm2711_vpu_vpu0_d_uc_atwait, "monitor=1,bus=7,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_atrans, bcm2711_vpu_vpu0_d_uc_atrans, "monitor=1,bus=7,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_amax, bcm2711_vpu_vpu0_d_uc_amax, "monitor=1,bus=7,counter=2");
@@ -1813,7 +1734,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_rwait, bcm2711_vpu_vpu0_d_uc_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_rtrans, bcm2711_vpu_vpu0_d_uc_rtrans, "monitor=1,bus=7,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_rmax, bcm2711_vpu_vpu0_d_uc_rmax, "monitor=1,bus=7,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_rpend, bcm2711_vpu_vpu0_d_uc_rpend, "monitor=1,bus=7,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu0_d_uc_ratrans, bcm2711_vpu_vpu0_d_uc_ratrans, "monitor=1,bus=7,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_atwait, bcm2711_vpu_vpu1_i_uc_atwait, "monitor=1,bus=8,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_atrans, bcm2711_vpu_vpu1_i_uc_atrans, "monitor=1,bus=8,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_amax, bcm2711_vpu_vpu1_i_uc_amax, "monitor=1,bus=8,counter=2");
@@ -1824,7 +1744,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_rwait, bcm2711_vpu_vpu1_i_uc_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_rtrans, bcm2711_vpu_vpu1_i_uc_rtrans, "monitor=1,bus=8,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_rmax, bcm2711_vpu_vpu1_i_uc_rmax, "monitor=1,bus=8,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_rpend, bcm2711_vpu_vpu1_i_uc_rpend, "monitor=1,bus=8,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu1_i_uc_ratrans, bcm2711_vpu_vpu1_i_uc_ratrans, "monitor=1,bus=8,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_atwait, bcm2711_vpu_vpu0_i_uc_atwait, "monitor=1,bus=9,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_atrans, bcm2711_vpu_vpu0_i_uc_atrans, "monitor=1,bus=9,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_amax, bcm2711_vpu_vpu0_i_uc_amax, "monitor=1,bus=9,counter=2");
@@ -1835,7 +1754,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_rwait, bcm2711_vpu_vpu0_i_uc_rwait, "monitor
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_rtrans, bcm2711_vpu_vpu0_i_uc_rtrans, "monitor=1,bus=9,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_rmax, bcm2711_vpu_vpu0_i_uc_rmax, "monitor=1,bus=9,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_rpend, bcm2711_vpu_vpu0_i_uc_rpend, "monitor=1,bus=9,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu0_i_uc_ratrans, bcm2711_vpu_vpu0_i_uc_ratrans, "monitor=1,bus=9,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_vpu_uc_atwait, bcm2711_vpu_vpu_uc_atwait, "monitor=1,bus=10,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_vpu_uc_atrans, bcm2711_vpu_vpu_uc_atrans, "monitor=1,bus=10,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_vpu_uc_amax, bcm2711_vpu_vpu_uc_amax, "monitor=1,bus=10,counter=2");
@@ -1846,7 +1764,6 @@ PMU_EVENT_ATTR_STRING(vpu_vpu_uc_rwait, bcm2711_vpu_vpu_uc_rwait, "monitor=1,bus
 PMU_EVENT_ATTR_STRING(vpu_vpu_uc_rtrans, bcm2711_vpu_vpu_uc_rtrans, "monitor=1,bus=10,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_vpu_uc_rmax, bcm2711_vpu_vpu_uc_rmax, "monitor=1,bus=10,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_vpu_uc_rpend, bcm2711_vpu_vpu_uc_rpend, "monitor=1,bus=10,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_vpu_uc_ratrans, bcm2711_vpu_vpu_uc_ratrans, "monitor=1,bus=10,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_atwait, bcm2711_vpu_l2_out_atwait, "monitor=1,bus=11,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_atrans, bcm2711_vpu_l2_out_atrans, "monitor=1,bus=11,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_amax, bcm2711_vpu_l2_out_amax, "monitor=1,bus=11,counter=2");
@@ -1857,7 +1774,6 @@ PMU_EVENT_ATTR_STRING(vpu_l2_out_rwait, bcm2711_vpu_l2_out_rwait, "monitor=1,bus
 PMU_EVENT_ATTR_STRING(vpu_l2_out_rtrans, bcm2711_vpu_l2_out_rtrans, "monitor=1,bus=11,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_rmax, bcm2711_vpu_l2_out_rmax, "monitor=1,bus=11,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_l2_out_rpend, bcm2711_vpu_l2_out_rpend, "monitor=1,bus=11,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_l2_out_ratrans, bcm2711_vpu_l2_out_ratrans, "monitor=1,bus=11,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_atwait, bcm2711_vpu_dma_uc_atwait, "monitor=1,bus=12,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_atrans, bcm2711_vpu_dma_uc_atrans, "monitor=1,bus=12,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_amax, bcm2711_vpu_dma_uc_amax, "monitor=1,bus=12,counter=2");
@@ -1868,7 +1784,6 @@ PMU_EVENT_ATTR_STRING(vpu_dma_uc_rwait, bcm2711_vpu_dma_uc_rwait, "monitor=1,bus
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_rtrans, bcm2711_vpu_dma_uc_rtrans, "monitor=1,bus=12,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_rmax, bcm2711_vpu_dma_uc_rmax, "monitor=1,bus=12,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_dma_uc_rpend, bcm2711_vpu_dma_uc_rpend, "monitor=1,bus=12,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_dma_uc_ratrans, bcm2711_vpu_dma_uc_ratrans, "monitor=1,bus=12,counter=10");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_atwait, bcm2711_vpu_l2_in_atwait, "monitor=1,bus=13,counter=0");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_atrans, bcm2711_vpu_l2_in_atrans, "monitor=1,bus=13,counter=1");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_amax, bcm2711_vpu_l2_in_amax, "monitor=1,bus=13,counter=2");
@@ -1879,7 +1794,6 @@ PMU_EVENT_ATTR_STRING(vpu_l2_in_rwait, bcm2711_vpu_l2_in_rwait, "monitor=1,bus=1
 PMU_EVENT_ATTR_STRING(vpu_l2_in_rtrans, bcm2711_vpu_l2_in_rtrans, "monitor=1,bus=13,counter=7");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_rmax, bcm2711_vpu_l2_in_rmax, "monitor=1,bus=13,counter=8");
 PMU_EVENT_ATTR_STRING(vpu_l2_in_rpend, bcm2711_vpu_l2_in_rpend, "monitor=1,bus=13,counter=9");
-PMU_EVENT_ATTR_STRING(vpu_l2_in_ratrans, bcm2711_vpu_l2_in_ratrans, "monitor=1,bus=13,counter=10");
 
 static struct attribute *bcm2711_events[] = {
 	&bcm2711_dma_l2_atwait.attr.attr,
@@ -1892,7 +1806,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_dma_l2_rtrans.attr.attr,
 	&bcm2711_dma_l2_rmax.attr.attr,
 	&bcm2711_dma_l2_rpend.attr.attr,
-	&bcm2711_dma_l2_ratrans.attr.attr,
 	&bcm2711_trans_atwait.attr.attr,
 	&bcm2711_trans_atrans.attr.attr,
 	&bcm2711_trans_amax.attr.attr,
@@ -1903,7 +1816,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_trans_rtrans.attr.attr,
 	&bcm2711_trans_rmax.attr.attr,
 	&bcm2711_trans_rpend.attr.attr,
-	&bcm2711_trans_ratrans.attr.attr,
 	&bcm2711_jpeg_atwait.attr.attr,
 	&bcm2711_jpeg_atrans.attr.attr,
 	&bcm2711_jpeg_amax.attr.attr,
@@ -1914,7 +1826,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_jpeg_rtrans.attr.attr,
 	&bcm2711_jpeg_rmax.attr.attr,
 	&bcm2711_jpeg_rpend.attr.attr,
-	&bcm2711_jpeg_ratrans.attr.attr,
 	&bcm2711_vpu_uc_atwait.attr.attr,
 	&bcm2711_vpu_uc_atrans.attr.attr,
 	&bcm2711_vpu_uc_amax.attr.attr,
@@ -1925,7 +1836,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_uc_rtrans.attr.attr,
 	&bcm2711_vpu_uc_rmax.attr.attr,
 	&bcm2711_vpu_uc_rpend.attr.attr,
-	&bcm2711_vpu_uc_ratrans.attr.attr,
 	&bcm2711_dma_uc_atwait.attr.attr,
 	&bcm2711_dma_uc_atrans.attr.attr,
 	&bcm2711_dma_uc_amax.attr.attr,
@@ -1936,7 +1846,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_dma_uc_rtrans.attr.attr,
 	&bcm2711_dma_uc_rmax.attr.attr,
 	&bcm2711_dma_uc_rpend.attr.attr,
-	&bcm2711_dma_uc_ratrans.attr.attr,
 	&bcm2711_system_l2_atwait.attr.attr,
 	&bcm2711_system_l2_atrans.attr.attr,
 	&bcm2711_system_l2_amax.attr.attr,
@@ -1947,7 +1856,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_system_l2_rtrans.attr.attr,
 	&bcm2711_system_l2_rmax.attr.attr,
 	&bcm2711_system_l2_rpend.attr.attr,
-	&bcm2711_system_l2_ratrans.attr.attr,
 	&bcm2711_hvs_atwait.attr.attr,
 	&bcm2711_hvs_atrans.attr.attr,
 	&bcm2711_hvs_amax.attr.attr,
@@ -1958,7 +1866,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_hvs_rtrans.attr.attr,
 	&bcm2711_hvs_rmax.attr.attr,
 	&bcm2711_hvs_rpend.attr.attr,
-	&bcm2711_hvs_ratrans.attr.attr,
 	&bcm2711_argon_atwait.attr.attr,
 	&bcm2711_argon_atrans.attr.attr,
 	&bcm2711_argon_amax.attr.attr,
@@ -1969,7 +1876,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_argon_rtrans.attr.attr,
 	&bcm2711_argon_rmax.attr.attr,
 	&bcm2711_argon_rpend.attr.attr,
-	&bcm2711_argon_ratrans.attr.attr,
 	&bcm2711_h264_atwait.attr.attr,
 	&bcm2711_h264_atrans.attr.attr,
 	&bcm2711_h264_amax.attr.attr,
@@ -1980,7 +1886,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_h264_rtrans.attr.attr,
 	&bcm2711_h264_rmax.attr.attr,
 	&bcm2711_h264_rpend.attr.attr,
-	&bcm2711_h264_ratrans.attr.attr,
 	&bcm2711_peripheral_atwait.attr.attr,
 	&bcm2711_peripheral_atrans.attr.attr,
 	&bcm2711_peripheral_amax.attr.attr,
@@ -1991,7 +1896,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_peripheral_rtrans.attr.attr,
 	&bcm2711_peripheral_rmax.attr.attr,
 	&bcm2711_peripheral_rpend.attr.attr,
-	&bcm2711_peripheral_ratrans.attr.attr,
 	&bcm2711_arm_uc_atwait.attr.attr,
 	&bcm2711_arm_uc_atrans.attr.attr,
 	&bcm2711_arm_uc_amax.attr.attr,
@@ -2002,7 +1906,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_arm_uc_rtrans.attr.attr,
 	&bcm2711_arm_uc_rmax.attr.attr,
 	&bcm2711_arm_uc_rpend.attr.attr,
-	&bcm2711_arm_uc_ratrans.attr.attr,
 	&bcm2711_arm_l2_atwait.attr.attr,
 	&bcm2711_arm_l2_atrans.attr.attr,
 	&bcm2711_arm_l2_amax.attr.attr,
@@ -2013,7 +1916,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_arm_l2_rtrans.attr.attr,
 	&bcm2711_arm_l2_rmax.attr.attr,
 	&bcm2711_arm_l2_rpend.attr.attr,
-	&bcm2711_arm_l2_ratrans.attr.attr,
 	&bcm2711_vpu_vpu1_d_l2_atwait.attr.attr,
 	&bcm2711_vpu_vpu1_d_l2_atrans.attr.attr,
 	&bcm2711_vpu_vpu1_d_l2_amax.attr.attr,
@@ -2024,7 +1926,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_vpu1_d_l2_rtrans.attr.attr,
 	&bcm2711_vpu_vpu1_d_l2_rmax.attr.attr,
 	&bcm2711_vpu_vpu1_d_l2_rpend.attr.attr,
-	&bcm2711_vpu_vpu1_d_l2_ratrans.attr.attr,
 	&bcm2711_vpu_vpu0_d_l2_atwait.attr.attr,
 	&bcm2711_vpu_vpu0_d_l2_atrans.attr.attr,
 	&bcm2711_vpu_vpu0_d_l2_amax.attr.attr,
@@ -2035,7 +1936,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_vpu0_d_l2_rtrans.attr.attr,
 	&bcm2711_vpu_vpu0_d_l2_rmax.attr.attr,
 	&bcm2711_vpu_vpu0_d_l2_rpend.attr.attr,
-	&bcm2711_vpu_vpu0_d_l2_ratrans.attr.attr,
 	&bcm2711_vpu_vpu1_i_l2_atwait.attr.attr,
 	&bcm2711_vpu_vpu1_i_l2_atrans.attr.attr,
 	&bcm2711_vpu_vpu1_i_l2_amax.attr.attr,
@@ -2046,7 +1946,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_vpu1_i_l2_rtrans.attr.attr,
 	&bcm2711_vpu_vpu1_i_l2_rmax.attr.attr,
 	&bcm2711_vpu_vpu1_i_l2_rpend.attr.attr,
-	&bcm2711_vpu_vpu1_i_l2_ratrans.attr.attr,
 	&bcm2711_vpu_vpu0_i_l2_atwait.attr.attr,
 	&bcm2711_vpu_vpu0_i_l2_atrans.attr.attr,
 	&bcm2711_vpu_vpu0_i_l2_amax.attr.attr,
@@ -2057,7 +1956,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_vpu0_i_l2_rtrans.attr.attr,
 	&bcm2711_vpu_vpu0_i_l2_rmax.attr.attr,
 	&bcm2711_vpu_vpu0_i_l2_rpend.attr.attr,
-	&bcm2711_vpu_vpu0_i_l2_ratrans.attr.attr,
 	&bcm2711_vpu_system_l2_atwait.attr.attr,
 	&bcm2711_vpu_system_l2_atrans.attr.attr,
 	&bcm2711_vpu_system_l2_amax.attr.attr,
@@ -2068,7 +1966,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_system_l2_rtrans.attr.attr,
 	&bcm2711_vpu_system_l2_rmax.attr.attr,
 	&bcm2711_vpu_system_l2_rpend.attr.attr,
-	&bcm2711_vpu_system_l2_ratrans.attr.attr,
 	&bcm2711_vpu_dma_l2_atwait.attr.attr,
 	&bcm2711_vpu_dma_l2_atrans.attr.attr,
 	&bcm2711_vpu_dma_l2_amax.attr.attr,
@@ -2079,7 +1976,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_dma_l2_rtrans.attr.attr,
 	&bcm2711_vpu_dma_l2_rmax.attr.attr,
 	&bcm2711_vpu_dma_l2_rpend.attr.attr,
-	&bcm2711_vpu_dma_l2_ratrans.attr.attr,
 	&bcm2711_vpu_vpu1_d_uc_atwait.attr.attr,
 	&bcm2711_vpu_vpu1_d_uc_atrans.attr.attr,
 	&bcm2711_vpu_vpu1_d_uc_amax.attr.attr,
@@ -2090,7 +1986,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_vpu1_d_uc_rtrans.attr.attr,
 	&bcm2711_vpu_vpu1_d_uc_rmax.attr.attr,
 	&bcm2711_vpu_vpu1_d_uc_rpend.attr.attr,
-	&bcm2711_vpu_vpu1_d_uc_ratrans.attr.attr,
 	&bcm2711_vpu_vpu0_d_uc_atwait.attr.attr,
 	&bcm2711_vpu_vpu0_d_uc_atrans.attr.attr,
 	&bcm2711_vpu_vpu0_d_uc_amax.attr.attr,
@@ -2101,7 +1996,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_vpu0_d_uc_rtrans.attr.attr,
 	&bcm2711_vpu_vpu0_d_uc_rmax.attr.attr,
 	&bcm2711_vpu_vpu0_d_uc_rpend.attr.attr,
-	&bcm2711_vpu_vpu0_d_uc_ratrans.attr.attr,
 	&bcm2711_vpu_vpu1_i_uc_atwait.attr.attr,
 	&bcm2711_vpu_vpu1_i_uc_atrans.attr.attr,
 	&bcm2711_vpu_vpu1_i_uc_amax.attr.attr,
@@ -2112,7 +2006,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_vpu1_i_uc_rtrans.attr.attr,
 	&bcm2711_vpu_vpu1_i_uc_rmax.attr.attr,
 	&bcm2711_vpu_vpu1_i_uc_rpend.attr.attr,
-	&bcm2711_vpu_vpu1_i_uc_ratrans.attr.attr,
 	&bcm2711_vpu_vpu0_i_uc_atwait.attr.attr,
 	&bcm2711_vpu_vpu0_i_uc_atrans.attr.attr,
 	&bcm2711_vpu_vpu0_i_uc_amax.attr.attr,
@@ -2123,7 +2016,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_vpu0_i_uc_rtrans.attr.attr,
 	&bcm2711_vpu_vpu0_i_uc_rmax.attr.attr,
 	&bcm2711_vpu_vpu0_i_uc_rpend.attr.attr,
-	&bcm2711_vpu_vpu0_i_uc_ratrans.attr.attr,
 	&bcm2711_vpu_vpu_uc_atwait.attr.attr,
 	&bcm2711_vpu_vpu_uc_atrans.attr.attr,
 	&bcm2711_vpu_vpu_uc_amax.attr.attr,
@@ -2134,7 +2026,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_vpu_uc_rtrans.attr.attr,
 	&bcm2711_vpu_vpu_uc_rmax.attr.attr,
 	&bcm2711_vpu_vpu_uc_rpend.attr.attr,
-	&bcm2711_vpu_vpu_uc_ratrans.attr.attr,
 	&bcm2711_vpu_l2_out_atwait.attr.attr,
 	&bcm2711_vpu_l2_out_atrans.attr.attr,
 	&bcm2711_vpu_l2_out_amax.attr.attr,
@@ -2145,7 +2036,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_l2_out_rtrans.attr.attr,
 	&bcm2711_vpu_l2_out_rmax.attr.attr,
 	&bcm2711_vpu_l2_out_rpend.attr.attr,
-	&bcm2711_vpu_l2_out_ratrans.attr.attr,
 	&bcm2711_vpu_dma_uc_atwait.attr.attr,
 	&bcm2711_vpu_dma_uc_atrans.attr.attr,
 	&bcm2711_vpu_dma_uc_amax.attr.attr,
@@ -2156,7 +2046,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_dma_uc_rtrans.attr.attr,
 	&bcm2711_vpu_dma_uc_rmax.attr.attr,
 	&bcm2711_vpu_dma_uc_rpend.attr.attr,
-	&bcm2711_vpu_dma_uc_ratrans.attr.attr,
 	&bcm2711_vpu_l2_in_atwait.attr.attr,
 	&bcm2711_vpu_l2_in_atrans.attr.attr,
 	&bcm2711_vpu_l2_in_amax.attr.attr,
@@ -2167,7 +2056,6 @@ static struct attribute *bcm2711_events[] = {
 	&bcm2711_vpu_l2_in_rtrans.attr.attr,
 	&bcm2711_vpu_l2_in_rmax.attr.attr,
 	&bcm2711_vpu_l2_in_rpend.attr.attr,
-	&bcm2711_vpu_l2_in_ratrans.attr.attr,
 	NULL,
 };
 
@@ -2702,6 +2590,43 @@ static int counter_offset(enum counter counter)
 	}
 }
 
+static u32 counter_width_mask(enum counter counter)
+{
+	switch (counter) {
+	case CNT_ATWAIT:
+	case CNT_AMAX:
+	case CNT_WWAIT:
+	case CNT_WMAX:
+	case CNT_RWAIT:
+	case CNT_RMAX:
+		return GENMASK(27, 0);
+	case CNT_RPEND:
+		return GENMASK(7, 0);
+	default:
+		return U32_MAX;
+	}
+}
+
+/* The max latency and pending read registers hold a level, not a running count. */
+static bool counter_is_level(enum counter counter)
+{
+	return counter == CNT_AMAX || counter == CNT_WMAX ||
+	       counter == CNT_RMAX || counter == CNT_RPEND;
+}
+
+static void rpi_axi_pmu_event_update(struct perf_event *event, u32 new_count)
+{
+	enum counter counter = config_to_counter(event->attr.config);
+	u32 mask = counter_width_mask(counter);
+	u32 prev_count = local64_read(&event->hw.prev_count);
+
+	local64_set(&event->hw.prev_count, new_count);
+	if (counter_is_level(counter))
+		local64_set(&event->count, new_count & mask);
+	else
+		local64_add((new_count - prev_count) & mask, &event->count);
+}
+
 /**
  * rpi_axi_pmu_read_counter() - Reads raw 32-bit hardware counter from watcher
  * @pmu: Pointer to PMU context
@@ -2763,9 +2688,8 @@ static void rpi_axi_pmu_read(struct perf_event *event)
 	struct rpi_axi_pmu *pmu = pmu_to_rpi_axi_pmu(event->pmu);
 	enum monitor mon = config_to_monitor(event->attr.config);
 	enum counter counter = config_to_counter(event->attr.config);
-	u64 prev_count, new_count;
+	u64 new_count;
 	unsigned long flags;
-	u32 delta;
 	/* Mailbox VPU counters are polled asynchronously in background vpu_work.
 	 * MMIO monitors (System) are read synchronously.
 	 */
@@ -2777,7 +2701,6 @@ static void rpi_axi_pmu_read(struct perf_event *event)
 		raw_spin_unlock_irqrestore(&pmu->lock, flags);
 		return;
 	}
-	prev_count = local64_read(&event->hw.prev_count);
 	new_count = rpi_axi_pmu_read_counter(pmu, mon, event->hw.idx, counter);
 	if (new_count == U32_MAX) {
 		/*
@@ -2787,9 +2710,7 @@ static void rpi_axi_pmu_read(struct perf_event *event)
 		raw_spin_unlock_irqrestore(&pmu->lock, flags);
 		return;
 	}
-	local64_set(&event->hw.prev_count, new_count);
-	delta = (new_count - prev_count);
-	local64_add(delta, &event->count);
+	rpi_axi_pmu_event_update(event, new_count);
 	raw_spin_unlock_irqrestore(&pmu->lock, flags);
 }
 
@@ -2827,8 +2748,7 @@ static void rpi_axi_pmu_vpu_work_handler(struct work_struct *work)
 		enum counter counter;
 		u64 gen;
 		int idx;
-		u64 prev_count, new_count;
-		u32 delta;
+		u64 new_count;
 
 		if (!event || (event->hw.state & PERF_HES_STOPPED) ||
 		    config_to_monitor(event->attr.config) != MON_VPU)
@@ -2879,10 +2799,7 @@ static void rpi_axi_pmu_vpu_work_handler(struct work_struct *work)
 				local64_set(&event->hw.prev_count, new_count);
 				event->hw.state |= PERF_HES_UPTODATE;
 			} else {
-				prev_count = local64_read(&event->hw.prev_count);
-				local64_set(&event->hw.prev_count, new_count);
-				delta = (new_count - prev_count);
-				local64_add(delta, &event->count);
+				rpi_axi_pmu_event_update(event, new_count);
 			}
 		}
 	}
@@ -2927,8 +2844,7 @@ static enum hrtimer_restart rpi_axi_pmu_timer_handler(struct hrtimer *timer)
 		struct perf_event *event = pmu->events[i];
 		enum counter counter;
 		enum monitor mon;
-		u64 prev_count, new_count;
-		u32 delta;
+		u64 new_count;
 
 		if (!event || (event->hw.state & PERF_HES_STOPPED))
 			continue;
@@ -2936,18 +2852,14 @@ static enum hrtimer_restart rpi_axi_pmu_timer_handler(struct hrtimer *timer)
 		if (pmu->monitor[mon].use_mailbox_interface)
 			continue;
 		counter = config_to_counter(event->attr.config);
-		prev_count = local64_read(&event->hw.prev_count);
 		new_count = rpi_axi_pmu_read_counter(pmu, mon,
 						    event->hw.idx, counter);
 		/*
 		 * U32_MAX indicates a hardware or IPC read failure. Ignore the update
 		 * to prevent spurious artificial counter spikes from underflows.
 		 */
-		if (new_count != U32_MAX) {
-			local64_set(&event->hw.prev_count, new_count);
-			delta = (new_count - prev_count);
-			local64_add(delta, &event->count);
-		}
+		if (new_count != U32_MAX)
+			rpi_axi_pmu_event_update(event, new_count);
 	}
 
 	if (pmu->active_vpu_events > 0 && pmu->monitor[MON_VPU].use_mailbox_interface)
@@ -3170,6 +3082,25 @@ static int rpi_axi_pmu_offline_cpu(unsigned int cpu, struct hlist_node *node)
 	return 0;
 }
 
+/*
+ * Some firmware accepts GET/SET_PERIPH_REG for the VPU monitor address without
+ * reaching the hardware, so check that a written enable bit reads back.
+ */
+static bool rpi_axi_pmu_vpu_accessible(struct rpi_axi_pmu *pmu)
+{
+	u32 tmp[3] = { pmu->monitor[MON_VPU].mailbox + GEN_CTRL, 1, 0 };
+	int err;
+
+	mutex_lock(&pmu->vpu_mutex);
+	set_monitor_control(pmu, MON_VPU, GEN_CTL_ENABLE_BIT);
+	err = rpi_firmware_property(pmu->firmware, RPI_FIRMWARE_GET_PERIPH_REG,
+				    tmp, sizeof(tmp));
+	set_monitor_control(pmu, MON_VPU, 0);
+	mutex_unlock(&pmu->vpu_mutex);
+
+	return !err && tmp[1] == 1 && (tmp[2] & GEN_CTL_ENABLE_BIT);
+}
+
 /**
  * rpi_axi_pmu__init() - Internal PMU driver initialization called during probe
  * @pmu: Pointer to PMU context
@@ -3203,8 +3134,9 @@ static int rpi_axi_pmu__init(struct rpi_axi_pmu *pmu, struct platform_device *pd
 	INIT_WORK(&pmu->vpu_work, rpi_axi_pmu_vpu_work_handler);
 	pmu->monitor[MON_SYSTEM].use_mailbox_interface = false;
 	pmu->monitor[MON_VPU].use_mailbox_interface = false;
-	if (pmu->chip == CHIP_BCM2835 || pmu->chip == CHIP_BCM2711) {
-		fw_node = of_find_compatible_node(NULL, NULL, "raspberrypi,bcm2835-firmware");
+	if (IS_ENABLED(CONFIG_RASPBERRYPI_FIRMWARE) &&
+	    (pmu->chip == CHIP_BCM2835 || pmu->chip == CHIP_BCM2711)) {
+		fw_node = of_parse_phandle(dev->of_node, "firmware", 0);
 		if (!fw_node) {
 			dev_err(dev, "Missing firmware node\n");
 			return -ENOENT;
@@ -3231,7 +3163,7 @@ static int rpi_axi_pmu__init(struct rpi_axi_pmu *pmu, struct platform_device *pd
 				ret = -EINVAL;
 				return ret;
 			}
-		} else {
+		} else if (i == MON_SYSTEM) {
 			struct resource *resource = platform_get_resource(pdev, IORESOURCE_MEM, i);
 
 			if (!resource)
@@ -3243,6 +3175,13 @@ static int rpi_axi_pmu__init(struct rpi_axi_pmu *pmu, struct platform_device *pd
 				return ret;
 			}
 		}
+	}
+
+	if (pmu->monitor[MON_VPU].use_mailbox_interface &&
+	    !rpi_axi_pmu_vpu_accessible(pmu)) {
+		dev_warn(dev, "VPU monitor not accessible through firmware\n");
+		pmu->monitor[MON_VPU].use_mailbox_interface = false;
+		pmu->monitor[MON_VPU].base_address = NULL;
 	}
 
 	pmu->cpu = -1;
