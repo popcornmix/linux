@@ -3525,6 +3525,13 @@ static int rpi_axi_pmu__init(struct rpi_axi_pmu *pmu, struct platform_device *pd
 		pmu->monitor[MON_VPU].base_address = NULL;
 	}
 
+	/*
+	 * VPU counters are only read every timer interval, and cannot be read when
+	 * an event is stopped, so a short multiplexing slice loses most of a VPU count.
+	 */
+	if (pmu->monitor[MON_VPU].use_mailbox_interface)
+		pmu->pmu.hrtimer_interval_ms = 10 * ktime_to_ms(RPI_AXI_PMU_TIMER_INTERVAL);
+
 	pmu->cpu = -1;
 	ret = cpuhp_state_add_instance(rpi_axi_pmu_cpuhp_state, &pmu->cpuhp_node);
 	if (ret) {
