@@ -135,8 +135,8 @@ enum bcm2835_system_bus {
  * @BCM2712_SB_RP1: RP1 south bridge on PCIe2 (BSTM_TOP in Broadcom documentation)
  * @BCM2712_SB_PCIE_01: External PCIe bus
  * @BCM2712_SB_ARGON_TOP: HEVC decoder and PiSP back end bus
- * @BCM2712_SB_ARB3: ARB3 bus
- * @BCM2712_SB_SD_DMA: SD/eMMC and DMA0 bus (SRC in Broadcom documentation)
+ * @BCM2712_SB_SDIO_WIFI: WiFi SDIO controller bus (ARB3 in Broadcom documentation)
+ * @BCM2712_SB_SD_DMA: SD/eMMC, DMA0 and DMA1 bus (SRC in Broadcom documentation)
  * @BCM2712_SB_HVDP: HVDP bus (unused on Raspberry Pi)
  * @BCM2712_SB_PER: Peripheral access bus
  * @BCM2712_SB_SYSTEM_L2: System L2 cache bus
@@ -151,7 +151,7 @@ enum bcm2712_system_bus {
 	BCM2712_SB_RP1 = 5,
 	BCM2712_SB_PCIE_01 = 6,
 	BCM2712_SB_ARGON_TOP = 7,
-	BCM2712_SB_ARB3 = 8,
+	BCM2712_SB_SDIO_WIFI = 8,
 	BCM2712_SB_SD_DMA = 9,
 	BCM2712_SB_HVDP = 10,
 	BCM2712_SB_PER = 11,
@@ -167,8 +167,8 @@ enum bcm2712_system_bus {
  * @BCM2712D0_SB_ARM: Arm CPU cluster bus
  * @BCM2712D0_SB_RP1: RP1 south bridge on PCIe2
  * @BCM2712D0_SB_ARGON_TOP: HEVC decoder, PiSP back end and external PCIe bus
- * @BCM2712D0_SB_ARB3: ARB3 bus
- * @BCM2712D0_SB_SD_DMA: SD/eMMC and DMA0 bus
+ * @BCM2712D0_SB_SDIO_WIFI: WiFi SDIO controller bus
+ * @BCM2712D0_SB_SD_DMA: SD/eMMC, DMA0 and DMA1 bus
  * @BCM2712D0_SB_PER: Peripheral access bus
  * @BCM2712D0_SB_SYSTEM_L2: System L2 cache bus
  * @BCM2712D0_SB_MAX: Number of buses
@@ -180,7 +180,7 @@ enum bcm2712d0_system_bus {
 	BCM2712D0_SB_ARM = 3,
 	BCM2712D0_SB_RP1 = 4,
 	BCM2712D0_SB_ARGON_TOP = 5,
-	BCM2712D0_SB_ARB3 = 6,
+	BCM2712D0_SB_SDIO_WIFI = 6,
 	BCM2712D0_SB_SD_DMA = 7,
 	BCM2712D0_SB_PER = 8,
 	BCM2712D0_SB_SYSTEM_L2 = 9,
@@ -2325,17 +2325,17 @@ PMU_EVENT_ATTR_STRING(argon_top_rtrans, bcm2712_argon_top_rtrans, "monitor=0,bus
 PMU_EVENT_ATTR_STRING(argon_top_rmax, bcm2712_argon_top_rmax, "monitor=0,bus=7,counter=8");
 PMU_EVENT_ATTR_STRING(argon_top_rpend, bcm2712_argon_top_rpend, "monitor=0,bus=7,counter=9");
 PMU_EVENT_ATTR_STRING(argon_top_ratrans, bcm2712_argon_top_ratrans, "monitor=0,bus=7,counter=10");
-PMU_EVENT_ATTR_STRING(arb3_atwait, bcm2712_arb3_atwait, "monitor=0,bus=8,counter=0");
-PMU_EVENT_ATTR_STRING(arb3_atrans, bcm2712_arb3_atrans, "monitor=0,bus=8,counter=1");
-PMU_EVENT_ATTR_STRING(arb3_amax, bcm2712_arb3_amax, "monitor=0,bus=8,counter=2");
-PMU_EVENT_ATTR_STRING(arb3_wwait, bcm2712_arb3_wwait, "monitor=0,bus=8,counter=3");
-PMU_EVENT_ATTR_STRING(arb3_wtrans, bcm2712_arb3_wtrans, "monitor=0,bus=8,counter=4");
-PMU_EVENT_ATTR_STRING(arb3_wmax, bcm2712_arb3_wmax, "monitor=0,bus=8,counter=5");
-PMU_EVENT_ATTR_STRING(arb3_rwait, bcm2712_arb3_rwait, "monitor=0,bus=8,counter=6");
-PMU_EVENT_ATTR_STRING(arb3_rtrans, bcm2712_arb3_rtrans, "monitor=0,bus=8,counter=7");
-PMU_EVENT_ATTR_STRING(arb3_rmax, bcm2712_arb3_rmax, "monitor=0,bus=8,counter=8");
-PMU_EVENT_ATTR_STRING(arb3_rpend, bcm2712_arb3_rpend, "monitor=0,bus=8,counter=9");
-PMU_EVENT_ATTR_STRING(arb3_ratrans, bcm2712_arb3_ratrans, "monitor=0,bus=8,counter=10");
+PMU_EVENT_ATTR_STRING(sdio_wifi_atwait, bcm2712_sdio_wifi_atwait, "monitor=0,bus=8,counter=0");
+PMU_EVENT_ATTR_STRING(sdio_wifi_atrans, bcm2712_sdio_wifi_atrans, "monitor=0,bus=8,counter=1");
+PMU_EVENT_ATTR_STRING(sdio_wifi_amax, bcm2712_sdio_wifi_amax, "monitor=0,bus=8,counter=2");
+PMU_EVENT_ATTR_STRING(sdio_wifi_wwait, bcm2712_sdio_wifi_wwait, "monitor=0,bus=8,counter=3");
+PMU_EVENT_ATTR_STRING(sdio_wifi_wtrans, bcm2712_sdio_wifi_wtrans, "monitor=0,bus=8,counter=4");
+PMU_EVENT_ATTR_STRING(sdio_wifi_wmax, bcm2712_sdio_wifi_wmax, "monitor=0,bus=8,counter=5");
+PMU_EVENT_ATTR_STRING(sdio_wifi_rwait, bcm2712_sdio_wifi_rwait, "monitor=0,bus=8,counter=6");
+PMU_EVENT_ATTR_STRING(sdio_wifi_rtrans, bcm2712_sdio_wifi_rtrans, "monitor=0,bus=8,counter=7");
+PMU_EVENT_ATTR_STRING(sdio_wifi_rmax, bcm2712_sdio_wifi_rmax, "monitor=0,bus=8,counter=8");
+PMU_EVENT_ATTR_STRING(sdio_wifi_rpend, bcm2712_sdio_wifi_rpend, "monitor=0,bus=8,counter=9");
+PMU_EVENT_ATTR_STRING(sdio_wifi_ratrans, bcm2712_sdio_wifi_ratrans, "monitor=0,bus=8,counter=10");
 PMU_EVENT_ATTR_STRING(sd_dma_atwait, bcm2712_sd_dma_atwait, "monitor=0,bus=9,counter=0");
 PMU_EVENT_ATTR_STRING(sd_dma_atrans, bcm2712_sd_dma_atrans, "monitor=0,bus=9,counter=1");
 PMU_EVENT_ATTR_STRING(sd_dma_amax, bcm2712_sd_dma_amax, "monitor=0,bus=9,counter=2");
@@ -2446,17 +2446,17 @@ PMU_EVENT_ATTR_STRING(argon_top_rtrans, bcm2712d0_argon_top_rtrans, "monitor=0,b
 PMU_EVENT_ATTR_STRING(argon_top_rmax, bcm2712d0_argon_top_rmax, "monitor=0,bus=5,counter=8");
 PMU_EVENT_ATTR_STRING(argon_top_rpend, bcm2712d0_argon_top_rpend, "monitor=0,bus=5,counter=9");
 PMU_EVENT_ATTR_STRING(argon_top_ratrans, bcm2712d0_argon_top_ratrans, "monitor=0,bus=5,counter=10");
-PMU_EVENT_ATTR_STRING(arb3_atwait, bcm2712d0_arb3_atwait, "monitor=0,bus=6,counter=0");
-PMU_EVENT_ATTR_STRING(arb3_atrans, bcm2712d0_arb3_atrans, "monitor=0,bus=6,counter=1");
-PMU_EVENT_ATTR_STRING(arb3_amax, bcm2712d0_arb3_amax, "monitor=0,bus=6,counter=2");
-PMU_EVENT_ATTR_STRING(arb3_wwait, bcm2712d0_arb3_wwait, "monitor=0,bus=6,counter=3");
-PMU_EVENT_ATTR_STRING(arb3_wtrans, bcm2712d0_arb3_wtrans, "monitor=0,bus=6,counter=4");
-PMU_EVENT_ATTR_STRING(arb3_wmax, bcm2712d0_arb3_wmax, "monitor=0,bus=6,counter=5");
-PMU_EVENT_ATTR_STRING(arb3_rwait, bcm2712d0_arb3_rwait, "monitor=0,bus=6,counter=6");
-PMU_EVENT_ATTR_STRING(arb3_rtrans, bcm2712d0_arb3_rtrans, "monitor=0,bus=6,counter=7");
-PMU_EVENT_ATTR_STRING(arb3_rmax, bcm2712d0_arb3_rmax, "monitor=0,bus=6,counter=8");
-PMU_EVENT_ATTR_STRING(arb3_rpend, bcm2712d0_arb3_rpend, "monitor=0,bus=6,counter=9");
-PMU_EVENT_ATTR_STRING(arb3_ratrans, bcm2712d0_arb3_ratrans, "monitor=0,bus=6,counter=10");
+PMU_EVENT_ATTR_STRING(sdio_wifi_atwait, bcm2712d0_sdio_wifi_atwait, "monitor=0,bus=6,counter=0");
+PMU_EVENT_ATTR_STRING(sdio_wifi_atrans, bcm2712d0_sdio_wifi_atrans, "monitor=0,bus=6,counter=1");
+PMU_EVENT_ATTR_STRING(sdio_wifi_amax, bcm2712d0_sdio_wifi_amax, "monitor=0,bus=6,counter=2");
+PMU_EVENT_ATTR_STRING(sdio_wifi_wwait, bcm2712d0_sdio_wifi_wwait, "monitor=0,bus=6,counter=3");
+PMU_EVENT_ATTR_STRING(sdio_wifi_wtrans, bcm2712d0_sdio_wifi_wtrans, "monitor=0,bus=6,counter=4");
+PMU_EVENT_ATTR_STRING(sdio_wifi_wmax, bcm2712d0_sdio_wifi_wmax, "monitor=0,bus=6,counter=5");
+PMU_EVENT_ATTR_STRING(sdio_wifi_rwait, bcm2712d0_sdio_wifi_rwait, "monitor=0,bus=6,counter=6");
+PMU_EVENT_ATTR_STRING(sdio_wifi_rtrans, bcm2712d0_sdio_wifi_rtrans, "monitor=0,bus=6,counter=7");
+PMU_EVENT_ATTR_STRING(sdio_wifi_rmax, bcm2712d0_sdio_wifi_rmax, "monitor=0,bus=6,counter=8");
+PMU_EVENT_ATTR_STRING(sdio_wifi_rpend, bcm2712d0_sdio_wifi_rpend, "monitor=0,bus=6,counter=9");
+PMU_EVENT_ATTR_STRING(sdio_wifi_ratrans, bcm2712d0_sdio_wifi_ratrans, "monitor=0,bus=6,counter=10");
 PMU_EVENT_ATTR_STRING(sd_dma_atwait, bcm2712d0_sd_dma_atwait, "monitor=0,bus=7,counter=0");
 PMU_EVENT_ATTR_STRING(sd_dma_atrans, bcm2712d0_sd_dma_atrans, "monitor=0,bus=7,counter=1");
 PMU_EVENT_ATTR_STRING(sd_dma_amax, bcm2712d0_sd_dma_amax, "monitor=0,bus=7,counter=2");
@@ -2580,17 +2580,17 @@ static struct attribute *bcm2712_events[] = {
 	&bcm2712_argon_top_rmax.attr.attr,
 	&bcm2712_argon_top_rpend.attr.attr,
 	&bcm2712_argon_top_ratrans.attr.attr,
-	&bcm2712_arb3_atwait.attr.attr,
-	&bcm2712_arb3_atrans.attr.attr,
-	&bcm2712_arb3_amax.attr.attr,
-	&bcm2712_arb3_wwait.attr.attr,
-	&bcm2712_arb3_wtrans.attr.attr,
-	&bcm2712_arb3_wmax.attr.attr,
-	&bcm2712_arb3_rwait.attr.attr,
-	&bcm2712_arb3_rtrans.attr.attr,
-	&bcm2712_arb3_rmax.attr.attr,
-	&bcm2712_arb3_rpend.attr.attr,
-	&bcm2712_arb3_ratrans.attr.attr,
+	&bcm2712_sdio_wifi_atwait.attr.attr,
+	&bcm2712_sdio_wifi_atrans.attr.attr,
+	&bcm2712_sdio_wifi_amax.attr.attr,
+	&bcm2712_sdio_wifi_wwait.attr.attr,
+	&bcm2712_sdio_wifi_wtrans.attr.attr,
+	&bcm2712_sdio_wifi_wmax.attr.attr,
+	&bcm2712_sdio_wifi_rwait.attr.attr,
+	&bcm2712_sdio_wifi_rtrans.attr.attr,
+	&bcm2712_sdio_wifi_rmax.attr.attr,
+	&bcm2712_sdio_wifi_rpend.attr.attr,
+	&bcm2712_sdio_wifi_ratrans.attr.attr,
 	&bcm2712_sd_dma_atwait.attr.attr,
 	&bcm2712_sd_dma_atrans.attr.attr,
 	&bcm2712_sd_dma_amax.attr.attr,
@@ -2859,17 +2859,17 @@ static struct attribute *bcm2712d0_events[] = {
 	&bcm2712d0_argon_top_rmax.attr.attr,
 	&bcm2712d0_argon_top_rpend.attr.attr,
 	&bcm2712d0_argon_top_ratrans.attr.attr,
-	&bcm2712d0_arb3_atwait.attr.attr,
-	&bcm2712d0_arb3_atrans.attr.attr,
-	&bcm2712d0_arb3_amax.attr.attr,
-	&bcm2712d0_arb3_wwait.attr.attr,
-	&bcm2712d0_arb3_wtrans.attr.attr,
-	&bcm2712d0_arb3_wmax.attr.attr,
-	&bcm2712d0_arb3_rwait.attr.attr,
-	&bcm2712d0_arb3_rtrans.attr.attr,
-	&bcm2712d0_arb3_rmax.attr.attr,
-	&bcm2712d0_arb3_rpend.attr.attr,
-	&bcm2712d0_arb3_ratrans.attr.attr,
+	&bcm2712d0_sdio_wifi_atwait.attr.attr,
+	&bcm2712d0_sdio_wifi_atrans.attr.attr,
+	&bcm2712d0_sdio_wifi_amax.attr.attr,
+	&bcm2712d0_sdio_wifi_wwait.attr.attr,
+	&bcm2712d0_sdio_wifi_wtrans.attr.attr,
+	&bcm2712d0_sdio_wifi_wmax.attr.attr,
+	&bcm2712d0_sdio_wifi_rwait.attr.attr,
+	&bcm2712d0_sdio_wifi_rtrans.attr.attr,
+	&bcm2712d0_sdio_wifi_rmax.attr.attr,
+	&bcm2712d0_sdio_wifi_rpend.attr.attr,
+	&bcm2712d0_sdio_wifi_ratrans.attr.attr,
 	&bcm2712d0_sd_dma_atwait.attr.attr,
 	&bcm2712d0_sd_dma_atrans.attr.attr,
 	&bcm2712d0_sd_dma_amax.attr.attr,
